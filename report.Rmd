@@ -1,0 +1,4085 @@
+---
+title: 'Data Science: Capstone Project'
+subtitle: 'Prediction of Covid19 and its relationship with geographic variables.'
+author: "Diogenes Carroz"
+date: "27-12-2020"
+output: 
+  pdf_document:
+    pandoc_args: --listings
+    includes:
+      in_header: preamble.tex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if(!require(EpiEstim)) install.packages("EpiEstim")
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(ggpmisc)) install.packages("ggpmisc")
+if(!require(ggrepel)) install.packages("ggrepel")
+if(!require(caret)) install.packages("caret")
+if(!require(data.table)) install.packages("data.table")
+if(!require(lubridate)) install.packages("lubridate")
+if(!require(tools)) install.packages("tools")
+if(!require(scales)) install.packages("scales")
+if(!require(RCurl)) install.packages("RCurl")
+if(!require(utils)) install.packages("utils")
+if(!require(gridExtra)) install.packages("gridExtra")
+if(!require(maps)) install.packages("maps")
+if(!require(mapdata)) install.packages("mapdata")
+if(!require(RColorBrewer)) install.packages("RColorBrewer")
+if(!require(countrycode)) install.packages("countrycode")
+if(!require(tidytext)) install.packages("tidytext")
+if(!require(readxl)) install.packages("readxl")
+if(!require(corrplot)) install.packages("corrplot")
+if(!require(zoo)) install.packages("zoo")
+if(!require(kableExtra)) install.packages("kableExtra")
+```
+
+# INTRODUCTION
+
+# Overview
+
+> COVID-19 is the infectious disease caused by the coronavirus, SARS-CoV-2, which is a respiratory pathogen. WHO first learned of this new virus from cases in Wuhan, People’s Republic of China on 31 December 2019. - WHO
+
+
+# Goal of the Project
+
+1. What are the risk factors associated with disease severity from Covid-19 infection?
+2. What is the impact of the measures adopted by the countries on the lethality of the infection?
+
+
+# Key Steps
+
+## 1. Risk factor's
+
+The first task we must face is to identify the risk factors that can affect the severity of the disease in those infected with Covid-19.
+
+An accepted classification of risk factors is as follows:
+
+Table: Types of risk factors
+
+ **Class** |  **Description** | 
+-----------| ----------------------------------------|
+**Mobility** | The term mobility refers to the set of movements, of people and goods, that occur in a physical environment. In this case, it focuses on the mobility of people, these being the vectors of transmission of the disease.
+**Facilities** | It refers to the hospital capacity and the physical and human resources necessary to combat the pandemic and care for the sick.
+**Health** | It involves factors that affect the health level of the population, such as vaccination and nutrition levels; and the impact of diseases such as cancer, diabetes, lung diseases, obesity, HIV, among others.
+**Measures** | This type of factor refers to the measures taken by the authorities of each country to reduce the levels of contagion and lethality of the disease in their regions. The timing of the measures, the proportion of the affected population and their duration are considered.
+**Testing** | Testing describes what is related to the detection of infected people, whether they present symptoms or are asymptomatic. It takes into account the number of the population that is being tested for the virus, the type of test performed and the duration for giving the test results.
+**Tracking** | It deals with the capacity of each region or country to determine the persons suspected of contagion from the sources of infection.
+**Vulnerability** | The vulnerability factors describe the social, political and economic conditions that could influence the levels of infections and deaths associated with Covid-19.
+
+
+## 2. Goverment Measures
+
+Governments have implemented different measures to contain the disease, focused mainly on isolating people and the use of masks and other sanitary measures in order to prevent the spread of the disease or at least reduce the speed of contagion. In general terms, the measures to prevent the spread of the disease can be grouped in two ways: Quarantine and Isolation.
+
+**Quarantine**: means restricting activities and/or separating people who are not ill but may have been exposed to COVID-19. The quarantine can take place in a designated facility or at home for 14 days.
+
+**Isolation**: means separating people who are ill with symptoms of COVID-19 and/or have tested positive.
+
+
+## 3. Pandemic Data
+
+The **pandemic** type refers to data associated with the cases and deaths associated with the Covid-19 disease.
+
+The most important data that we must have with the number of infected and deceased people distributed by country over a period of time close to the beginning of the pandemic and the day of issuance of this report.
+
+
+## 4. Correlation
+
+Establish the relationship that exists between the different pandemic and geographic variables and determine whether there are factors in such relationships that affect the risk of contagion and fatality.
+
+
+# Datasets Description
+
+## Pandemic Data
+
+### Johns Hopkins University Center for Systems Science and Engineering (CSSE) files
+
+This is the data repository for the 2019 Novel Coronavirus Visual Dashboard operated by the Johns Hopkins University Center for Systems Science and Engineering (JHU CSSE). Also, Supported by ESRI Living Atlas Team and the Johns Hopkins University Applied Physics Lab (JHU APL).
+
+Includes a complete list of all sources ever used in the data set, since January 21, 2010. Some sources listed here (e.g., WHO, ECDC, US CDC, BNO News) are not currently relied upon as a source of data.
+
+The current version of this data can be obtained from:
+
+"https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series"
+
+Let's get the data stored in the file **time_series_covid19_confirmed_global.csv**:
+
+```{r File_csse}
+csse_data <- read.csv("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv", fileEncoding = "UTF-8-BOM")
+
+knitr::kable(head(csse_data[,1:8],5),caption = "First rows of CSSE data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+```{r Drop_csse_data, include=FALSE}
+rm(csse_data)
+```
+
+A dataframe is obtained with the following columns:
+
+ **Column** |  **Description** | 
+-----------| ----------------------------------------|
+**Province.State** | Identify a province or state of a country, certain countries report detailed data by province.
+**Country.Region** | Identify the country.
+**Lat** | Latitude of the country.
+**Long** | Longitude of the country.
+**X1.22.20 X1.23.20 ...** | These columns represent each registered day.
+
+## Demographic data
+
+If the pandemic data refers to the behavior of the virus infection in people, the demographic data is information about people and groups of people. This data includes attributes such as age, sex, place of residence, income, health conditions and, in particular, aspects of people's living conditions and the environment that can affect the spread of disease and fatality. Demographic data are also related to the region or country such as the number of people who inhabit it or population, geographical location, weather conditions, even political aspects such as type of government regime, economic freedom and levels of equality.
+
+Among the variety of demographic data, we focus on population density and geographic location.
+
+
+### Population
+
+We obtain the population of each country for the year 2020 provided by the United Nations (un.org) and we store it in `pop.2020`.
+
+```{r Population}
+# Get wpp2019 data (United Nations)
+pop.2020 <- read.csv("https://population.un.org/wpp/Download/Files/1_Indicators%20(Standard)/CSV_FILES/WPP2019_TotalPopulationBySex.csv",
+                     fileEncoding = "UTF-8-BOM") %>%
+  filter(Time == 2020 & VarID == 2)
+
+knitr::kable(head(pop.2020),caption = "First rows of Population data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+
+### Geographical Position
+
+Let's see the behavior of the pandemic with respect to the continents and subcontinental regions, so first we must associate the continent and region to our `covid19` data.
+
+We will use the ISO code, which we added earlier, to join without worrying about differences in the names of the countries.
+
+
+### Countries 
+
+We will use the ISO codes as an identifier for the countries. The ISO country codes are internationally recognized codes that designate every country. In github we can find several datasets with the Isocodes, I have used the following:
+
+```{r Isocode}
+Isocode <- read.csv("https://gist.githubusercontent.com/tadast/8827699/raw/f5cac3d42d16b78348610fc4ec301e9234f82821/countries_codes_and_coordinates.csv",
+                    fileEncoding = "UTF-8-BOM") %>%
+  mutate(country.name = as.character(Country),
+         country.alphacode = str_remove(as.character(Alpha.3.code)," ")) %>%
+  rename(country.isocode = Numeric.code,
+         latitude = Latitude..average.,
+         longitude = Longitude..average.) %>%
+  select(country.name, country.alphacode, country.isocode, latitude, longitude)
+
+knitr::kable(head(Isocode),caption = "First rows of Isocode data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 6, position = "center")
+```
+
+
+### Continents and Regions
+
+We will add two geographic dimensions to our analysis: Continents and Regions. To obtain the continents and regions of each country we use the countrycode () function of the library of the same name.
+
+**Continents**
+```{r Continents}
+library(countrycode)
+countrycode(sourcevar = c("USA", "ITA", "DZA", "IND", "AUS"), 
+            origin = "iso3c", destination = "continent")
+```
+
+**Regions**
+```{r Regions}
+countrycode(sourcevar = c("USA", "ITA", "DZA", "IND", "AUS"), 
+            origin = "iso3c", destination = "region23")
+```
+
+
+## Measures data
+
+### ACAPS Dataset
+
+> ACAPS is an independent information provider, free from the bias or vested interests of a specific enterprise, sector, or region. As independent specialists in humanitarian needs analysis and assessment, we are not affiliated to the UN or any other organisation. This helps guarantee that the ACAPS analysis is objective and evidence-based.
+
+> The COVID19 Government Measures Dataset puts together all the measures implemented by governments worldwide in response to the Coronavirus pandemic. Data collection includes secondary data review. The researched information available falls into five categories:
+
+* Humanitarian exemption
+* Social distancing
+* Movement restrictions
+* Public health measures
+* Social and economic measures
+* Lockdowns
+
+```{r Acaps_data1}
+# COVID-19 GOVERNMENT MEASURES DATASET
+
+tmp <- tempfile(fileext = ".xlsx")
+download.file(url = "https://www.acaps.org/sites/acaps/files/resources/files/acaps_covid19_government_measures_dataset_0.xlsx", 
+              destfile = tmp,
+              mode='wb')
+measures <- read_xlsx(path = tmp, sheet = "Dataset")
+
+knitr::kable(head(measures[1:8]),caption = "First rows of ACAPS data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 6, position = "center")
+```
+
+The different measures that are recorded in this dataset are identified by the type of measure and are grouped into categories, below we show the measures and categories that we will find in this dataset:
+
+```{r Acaps_data2}
+unique(measures$CATEGORY) %>%
+  knitr::kable(caption = "Categories Measures") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+```{r Drop_tmp1, include=FALSE}
+rm(tmp)
+```
+
+
+## Test Positivity Rate
+
+The test positivity rate is the percentage of people who test positive for the infection out of all who have undergone a PCR test for a specified time.
+
+The World Health Organization (WHO) recommends that this percentage stay below 5%, "as long as" surveillance "is comprehensive," that is, a correct diagnostic strategy is being followed.
+
+So then, the test positivity rate is an indicator that allows us to measure whether the containment of the disease is being successful or not.
+
+
+### Our World Data Dataset
+
+Our World in Data does not provide various data on the pandemic, including the positivity rate of the tests (`positive_rate`) throughout the pandemic for each country that provides this information.
+
+```{r Owd_data}
+owd_data <- read.csv("https://github.com/owid/covid-19-data/raw/master/public/data/owid-covid-data.csv",
+                     fileEncoding = "UTF-8-BOM") %>%
+  mutate(date = as.Date(date)) %>%
+  rename(country.alphacode = iso_code)
+
+knitr::kable(tail(select(owd_data, country.alphacode, date, positive_rate)),
+             caption = "Last rows of OWD") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 6, position = "center")
+```
+
+
+# Variables
+
+## Indicators to measure the pandemic
+
+One of the first considerations that we must make to determine the impact of factors on the behavior of the pandemic and its impact on the population is to establish some rules on how to measure the pandemic.
+
+The scientific community has established several indicators to measure the pandemic, the most used indicators, by way of consensus, are:
+
+
+### 1. Number of new infected cases
+
+This indicator measures the magnitude of the epidemic. This data can be influenced by the number of sick people, the number of tests performed, or how it is defined if a person suspected of having the disease.
+
+Some scientists, such as the professors Cristobal Cuadrado from the University of Chile [http://www.saludpublica.uchile.cl/academicos/politicas-sistemas-y-gestion-de-salud/102917/cristobal-cuadrado-nahum], report that the day-to-day variability of this indicator may represent noise, so they recommend that cases be measured in weeks.
+
+We will use the term $I_k$ to indicate the number of cases of infected people in a period $k$. $I_t$ indicates the number of people who infected from the beginning of the pandemic until day $t$.
+
+**Incidence rate**
+
+The incidence rate, that we will call $IR$, allows us to appreciate the proportion of the population that suffered from the disease. The $IR$ is expressed in the following way:
+
+$$IR_{t,n} = \frac {I_{t,n}} {n} 10^j$$
+where:
+$IR_{t,n}$ is the incidence rate in a period of time $t$.
+$I_{n,t}$ is the number of infected people or cases diagnosed by the same disease in a population group $n$ in a period of time $t$.
+$10^j$ is the conversion factor, example: $j = 5$ or 100,000
+
+
+### 2. Number of deceased
+
+According to the WHO, deaths from COVID-19 are defined as "those due to a clinically compatible disease in a probable or confirmed case of COVID-19, unless there is a clear alternative cause for death that cannot be related with COVID-19 (eg trauma). There should not be a full recovery period between illness and death."
+
+We will use $D_k$ to indicate the number of people who died from the disease in a period $k$. $D_t$ indicates the number of people who died from the beginning of the pandemic until day $t$.
+
+This indicator reflects the number of people who died on a given date and, although it is not useful for immediate decision-making, it is useful for knowing the real magnitude of the epidemic in terms of lethality and mortality.
+
+**The fatality rate or index** 
+
+The severity of a disease can be defined by the lethality ratio of the infection and is usually expressed as a percentage.
+
+There are two ways to measure case fatality: 
+* **IFR**: the case fatality ratio, which estimates the proportion of deaths among all infected people, and 
+* **CFR**: the case fatality ratio, which estimates the proportion of deaths among cases confirmed.
+
+Both rates are expressed with the following equations:
+
+$$ IFR_{n,t} = \frac {D_{n,t}} {I_{n,t}} 100 $$
+where:
+$IFR_{n,t}$ is fatality ratio of infection within group $n$ in a period of time $t$.
+$D_{n,t}$ is number of deaths within a group $n$ (a country or region) in a period of time $t$.
+$I_{n,t}$ is the number of infected people or cases diagnosed by the same disease in a population group $n$ in a period of time $t$.
+$100$ is the conversion factor to express as a percentage.
+
+$$ CFR_{n,t} = \frac {D_{n,t}} {TP_{n,t}} 100 $$
+where:
+$CFR_{n,t}$ is the fatality rate within group $n$ in a period of time $t$.
+$D_{n,t}$ is number of deaths within a group $n$ (a country or region) in a period of time $t$.
+$TP_{n,t}$ is the number of infected people or cases diagnosed with a positive test for the same disease in a population group $n$ in a period of time $t$.
+$100$ is the conversion factor to express as a percentage.
+
+To calculate the IFR, you must have a complete knowledge of the number of infections and deaths caused by the disease. Difficulties faced by several countries in obtaining accurate data mean that CFR is used to measure lethality.
+
+**The mortality rate** 
+
+The mortality rate refers to the proportion of deaths in a period in a specific population. It is normally expressed as the number of deaths per 100,000 inhabitants.
+
+$$ M_{n,t} = \frac {D_{n,t}} {P_{n,t}} 10^j $$
+where:
+$M_{n,t}$ is the mortality rate within group $n$ in a period of time $t$.
+$D_{n,t}$ is number of deaths within a group $n$ (a country or region) in a period of time $t$.
+$P_{n,t}$ is the total number of people in the group $n$ in a period of time $t$.
+$10^j$ is the conversion factor, example: $j = 5$ or 100,000
+
+
+### 3. Use of critical beds
+
+Indicates the number of people infected by Covid 19 in ICU bed and the number of people with mechanical ventilation.
+
+This number allows to account for the magnitude and severity of the disease in the population.
+
+We will use $U_t$ to indicate the number of patients using ICU beds at time $t$ of the pandemic.
+
+
+### 4. Number of tests performed
+
+It represents the number of tests carried out on a given population to detect the spread of the disease.
+
+This number is accompanied by the test positivity rate, that is, the number of people who tested positive with respect to the number of tests performed in a given population and period.
+
+$$ TPR_{n,t} = \frac {TP_{n,t}} {T_{n,t}} 100 $$
+where:
+$TPR_{n,t}$ is test positivity rate within group $n$ in a period of time $t$.
+$TP_{n,t}$ is the number of positive tests for a population $n$ in a period of time $t$.
+$T_{n,t}$ is the number of tests performed at a population group $n$ in a period of time $t$.
+$100$ is the conversion factor to express as a percentage.
+
+
+### 5. The R number
+
+The reproductive number **R** is defined as the average number of individuals who become infected from an infected.
+
+But before continuing with the R number, we must study the SIR epidemiological model.
+
+
+## Epidemiological Model SIR
+
+The objective of the SIR model is to estimate:
+
+* $S$: The number of individuals susceptible to becoming infected.
+* $I$: The number of individuals infected and capable of infecting.
+* $R$: The number of recovered individuals (who were cured or died).
+
+If $N$ is the total number of the population then: $N = S + I + R$ 
+
+The model uses the following formulas:
+
+The number of individuals susceptible to infection $S_t$ in the observation time $t$ is given by the equation:
+
+$$ S_t = \beta C \frac {S} {N} $$
+where:  
+$\beta$: is the temporal rate of probability of a subject to become infected.  
+$C$: is the number of contacts of the subject.  
+$S$: the total number of individuals susceptible to infection.   
+$N$: is the universe of individuals.  
+
+The number of infected individuals $I_t$ in the observation time $t$ is expressed by the equation:
+
+$$ I_t = \beta C \frac {S} {N} - R_t $$
+where $R_t$: is the number of people who are recovering during the observation time.
+
+The number of recovered $R_t$ in the observation time can be modeled, in a simple way, using the equation:
+
+$$ R_t = v I_t $$
+where $v$ is the temporal recovery rate of an infected subject, that is, $v_t$ is the probability of recovery, in time $t$, of a subject who was infected.
+
+**The basic reproduction number ($R_0$)** is defined as the average number of individuals who become infected from an infected person in the “initial” conditions of an epidemic. It expresses the transmission capacity of an infection, based on human behavior and the biological characteristics of the infectious agent. It is expressed by the equation:
+
+$$ R_0 = \frac {\beta} {v}$$
+
+If the first subject to develop the infection transmits it to two others, it will be said that the $R_0 = 2$.
+
+When $R_0 > 1$ the infection will spread, while when $R_0 < 1$ the infection will disappear quickly. Therefore, the higher the $R_0$ value, the faster the epidemic will progress.
+
+**The effective reproduction number $R_e$** is the number of individuals susceptible to being infected by an individual at a specific time when the entire population is not susceptible and is expressed as the equation:
+
+$$ R_e = \frac {\beta C} {v} \frac {S} {N}$$
+It can be said that an **epidemic will be controlled** when $R_e < 1$, since the speed of recovery of the infected is greater than the speed of transmission of the infection and the epidemic will tend to disappear. On the contrary, when $R_e > 1$, the speed of recovery of the infected is lower than the speed of transmission of the infection and the epidemic will tend to continue.
+
+**To control an epidemic, $\beta$, $C$ and $S$ must decrease and $v$ must increase.**
+
+To estimate the spread of the Covid-19 pandemic, we must change the equations to determine the numbers of susceptible, infected and recovered for each observation time $t$:
+
+$$ S_{t+1}= S_t - \beta C \frac {S_t} {N} I_t $$
+$$ I_{t+1}= I_t - \left( \beta C \frac {S_t} {N} I_t - v I_t \right) $$
+$$ R_{t+1}= R_t + v I_t $$
+
+In summary, these are the indicators to measure the pandemic:
+
+ **Indicator** |  **Equations** 
+---------------------|:------------------------------:|
+**1. Number of new cases** | $I_k$
+**Incidence rate**  | $IR_{t,n} = \frac {I_{t,n}} {n}$
+**2. Number of deceased** |  $D_k$ 
+**Fatality rate**   | $CFR_{n,t} = \frac {D_{n,t}} {TP_{n,t}} 100$
+**Mortality rate**  | $M_{n,t} = \frac {D_{n,t}} {P_{n,t}} 10^j$
+**3. Use of critical beds ** | $U_t$
+**4. Number of tests performed ** | 
+**Test positivity rate** | $TPR_{n,t} = \frac {TP_{n,t}} {T_{n,t}} 100$
+**5. The R number ** | $R_e = \frac {\beta C} {v} \frac {S} {N}$
+
+To calculate these indicators we need to obtain the following values from the supplied data classified as "pandemic":
+
+**Variables** | **Description**
+-------|-----------------------------|
+**N**  | Total Population.
+**S**  | Individuals susceptible
+**I**  | Individuals infected and capable of infecting
+**R**  | Recovered individuals
+**C**  | Contacts of the I
+**D**  | Deaths
+**T**  | Tests
+**TP** | Positive Tests
+**U**  | ICU beds in use
+
+The values of the numbers of infected, deceased and recovered people ($I$, $D$ and $R$) are usually available in the daily reports of each country (although for some countries the number of recovered is not reported), thus the value of S, would be given by the equation $S = N - I -R$.
+
+There are more problems in obtaining the number of contacts associated with infected individuals, so we must make estimates to obtain the number of contacts.
+
+So we start by analyzing the available data to obtain the values of the variables we need. We also need to express these variables in the form of columns of a data frame summarized in two dimensions: geographic region (country or territory) and time scale (days or weeks).
+
+
+# ANALYSIS
+
+# Techniques Used
+
+For data analysis and estimates, data smoothing, moving average application, linear regression in predictive algorithms are used to estimate the number of infected and deceased for the next few weeks.
+
+The effective reproductive number will be calculated to show the speed of infection. We will use the positivity rate of the tests in the estimation of the epidemiological phases in which each country is located and to determine if it is in a second wave of contagion.
+
+
+# Data Cleaning
+
+## CSSE: Covid data
+
+In the Johns Hopkins University CSSE data, the date columns represent a problem when performing the analyzes. It is advisable to have a row for each day, country and province registered. The following function gets the data from the csv files stored on github and transforms the date columns into a row format.
+
+```{r Read_csse}
+# Read CSSE data from github
+read_csse <- function(file, firstcols, name_col) {
+  df_data <- read.csv(str_c("https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series",
+                            "/",file), fileEncoding = "UTF-8-BOM")
+  # change de wide shape to long shape
+  df_data <- reshape(data = df_data, 
+                     direction = "long", 
+                     varying = list(firstcols:ncol(df_data)), 
+                     times = names(df_data)[firstcols:ncol(df_data)], 
+                     timevar = "date", 
+                     v.names = name_col) %>%
+    mutate(date = mdy(str_remove(date,"X"))) %>%
+    select(-id) 
+  row.names(df_data) <- NULL
+  df_data
+}
+```
+
+The values of confirmed cases, deaths and recovered are found in separate files. 
+We will name **I.cum** to confirmed cases, **D.cum** to deaths, and **R.cum** to patients recovered from Covid-19.
+
+Let's start by reading the file **time_series_covid19_confirmed_global.csv** that contains the cases, then we read the file **time_series_covid19_deaths_global.csv** to obtain the deaths and we put it together with the data of the confirmed cases, finally, we read the retrieved patient data from the file **time_series_covid19_recovered_global.csv** and put everything together.
+
+```{r Covid19_data}
+# get current CSSE data
+covid19 <-
+  # Acumulated Infected cases (I.cum)
+  read_csse("time_series_covid19_confirmed_global.csv", 5, "I.cum") %>% 
+  # Acumulated Deaths (D.cum)
+  left_join(read_csse("time_series_covid19_deaths_global.csv", 5, "D.cum")) %>%
+  # Acumulated Recovered (R.c)
+  left_join(read_csse("time_series_covid19_recovered_global.csv", 5, "R.cum"))
+```
+
+Some countries report their data differently by province or state. Then we obtain the total data by country grouping by the **Country.Region** column and summarizing the cases, deaths and recovered. 
+
+```{r Covid19_countries}
+# only countries
+covid19 <- covid19 %>%
+  group_by(Country.Region, date) %>%
+  summarise(I.cum = sum(I.cum, na.rm = T), 
+            D.cum = sum(D.cum, na.rm = T), 
+            R.cum = sum(R.cum, na.rm = T)) %>%
+  ungroup() 
+```
+
+The values of cases, deaths and recovered are expressed cumulatively. That is, the accumulated values up to that date since the pandemic began are recorded for each day.
+
+We need the daily values of the cases, deaths and recovered from each country or province, so we will create the columns: **I**, **D**, and **R** to express these daily values.
+
+```{r Covid19_daily}
+# I, D, R
+covid19 <- covid19 %>%
+  group_by(Country.Region) %>%
+  mutate(I = ifelse(date == first(date), I.cum, 
+                    I.cum - lag(I.cum, order_by = date)),
+         D = ifelse(date == first(date), D.cum, 
+                    D.cum - lag(D.cum, order_by = date)),
+         R = ifelse(date == first(date), R.cum, 
+                    R.cum - lag(R.cum, order_by = date))) %>%
+  mutate(country.name = str_remove(as.character(Country.Region),"[*]")) %>%
+  ungroup() %>%
+  select(country.name, date, 
+         I, D, R, I.cum, D.cum, R.cum)
+```
+
+There are two Cruise Ships in the data: 
+
+```{r Covid19_Ships}
+covid19 %>% 
+  filter(country.name %in% c("Diamond Princess", "MS Zaandam")) %>%
+  distinct(country.name) %>%
+  knitr::kable(caption = "Ships") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+We will only study countries so we will remove these cruises from our data.
+
+```{r Covid19_Remove_Ships}
+# Remove Cruise ships
+covid19 <- covid19 %>%
+  filter(!(country.name %in% c("Diamond Princess", "MS Zaandam")))
+```
+
+Let's look at what we have obtained:
+
+```{r Covid19_data_rows}
+knitr::kable(head(covid19),caption = "First rows of CSSE data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+
+knitr::kable(tail(covid19),caption = "Last rows of CSSE data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+
+## Iso Codes
+
+Some country names in the covid19 dataset do not match those of ISO codes:
+
+```{r Iso_codes_names}
+# Countries with other names
+covid19 %>%
+  anti_join(Isocode, by = "country.name") %>%
+  distinct(country.name) %>%
+  knitr::kable(caption = "Countries with other names") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+Updated names to match Isocode dataframe:
+
+```{r Iso_codes_update_names}
+# Update countries' names
+covid19 <- covid19 %>% 
+  mutate(country.name = case_when(
+    country.name == "Cabo Verde" ~ "Cape Verde",
+    country.name == "Congo (Brazzaville)" ~ "Congo",
+    country.name == "Congo (Kinshasa)" ~ "Congo, the Democratic Republic of the",
+    country.name == "Cote d'Ivoire" ~ "Ivory Coast",
+    country.name == "Czechia" ~ "Czech Republic",
+    country.name == "Eswatini" ~ "Swaziland",
+    country.name == "Holy See" ~ "Holy See (Vatican City State)",
+    country.name == "Iran" ~ "Iran, Islamic Republic of",
+    country.name == "Korea, South" ~ "South Korea",
+    country.name == "Laos" ~ "Lao People's Democratic Republic",
+    country.name == "Moldova" ~ "Moldova, Republic of",
+    country.name == "North Macedonia" ~ "Macedonia, the former Yugoslav Republic of",
+    country.name == "Syria" ~ "Syrian Arab Republic",
+    country.name == "Tanzania" ~ "Tanzania, United Republic of",
+    country.name == "US" ~ "United States",
+    country.name == "West Bank and Gaza" ~ "Palestinian Territory, Occupied",
+    country.name == "Micronesia" ~ "Micronesia, Federated States of",
+    TRUE ~ country.name)
+  )
+```
+
+The United Nations does not recognize Kosovo as a country, but in our data it does.
+
+```{r Iso_codes_Kosovo}
+Isocode <- rbind(Isocode, list("Kosovo","XXK", 383, 42.6675, 21.1662)) 
+```
+
+
+## ACAPS: Measure data
+
+The `read_acaps` function shown below downloads the ACAPS data and rename columns to match those of dataframe `covid19`.
+
+```{r Read_acaps}
+read_acaps <- function() {
+  tmp <- tempfile(fileext = ".xlsx")
+  download.file(url = "https://www.acaps.org/sites/acaps/files/resources/files/acaps_covid19_government_measures_dataset_0.xlsx", 
+                destfile = tmp,
+                mode='wb')
+  read_xlsx(path = tmp, sheet = "Dataset") %>%
+    mutate(date = as.Date(DATE_IMPLEMENTED)) %>%
+    rename(country.alphacode = ISO, 
+           measure.category = CATEGORY, 
+           measure.name = MEASURE) %>%
+    select(country.alphacode, date, measure.name, measure.category)
+}
+```
+
+Government measures to face the pandemic are grouped into six categories. We will establish the impact on people's normal activities, before the pandemic, with a value from 0 to 6, where 0 corresponds to no action taken and 6 to Lockdown:
+
+```{r measures}
+measures_category <- data.frame(measure.category = 
+                                  c("None",
+                                    "Humanitarian exemption",
+                                    "Governance and socio-economic measures",
+                                    "Public health measures",
+                                    "Social distancing",
+                                    "Movement restrictions",
+                                    "Lockdown"
+                                  ),
+                                measure.level = 0:6)
+
+knitr::kable(measures_category,caption = "Measurement categories") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+We add the column `measure.level` to indicate the degree of restriction of the measures:
+
+```{r }
+measures <- read_acaps() %>% left_join(measures_category)
+
+knitr::kable(head(measures),caption = "First rows of ACAPS data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+
+## Population data
+
+We match the column names that identify the countries with those of the `covid19` dataset.
+
+```{r Pop.2020}
+pop.2020 <- pop.2020 %>%
+  mutate(country.name = as.character(Location),
+         country.isocode = as.numeric(LocID)) %>%
+  select(country.name, country.isocode, PopTotal)
+
+knitr::kable(head(pop.2020),caption = "Popultation 2020") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+
+# Data Exploration
+
+## Add Isocode to covid19
+
+```{r Add_Isocode}
+covid19 <- covid19 %>%
+  left_join(Isocode)
+
+knitr::kable(head(covid19),caption = "Covid19 with Isocodes") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+
+```
+
+
+## Add Continent and Region to covid19
+
+```{r Add_continents_regions1, warning=FALSE}
+covid19 <- covid19 %>%
+  mutate(continent.name = countrycode(sourcevar = country.alphacode, 
+                                      origin = "iso3c", destination = "continent"),
+         region.name = countrycode(sourcevar = country.alphacode, 
+                                   origin = "iso3c", destination = "region23"))
+```
+
+```{r Add_continents_regions2}
+unique(covid19$country.name[which(is.na(covid19$continent.name))])
+unique(covid19$country.name[which(is.na(covid19$region.name))])
+```
+
+```{r Add_continents_regions3}
+covid19$continent.name[which(covid19$country.name == "Kosovo")] <- "Europe"
+covid19$region.name[which(covid19$country.name == "Kosovo")] <- "Southern Europe"
+covid19$region.name[which(covid19$country.name == "Western Sahara")] <-"Sub-Saharan Africa"
+```
+
+
+## Add Population to covid19
+
+```{r Add_Population1}
+# Add Population to covid19
+covid19 <- covid19 %>%
+  left_join(pop.2020, by = "country.isocode") %>% 
+  mutate(country.name = country.name.x,
+         N = PopTotal*1000) %>%
+  select(-country.name, -country.name.y, -PopTotal) %>%
+  rename(country.name = country.name.x)
+```
+
+Missing Isocodes:
+
+```{r Add_Population2}
+filter(covid19, date == last(date)) %>%
+  anti_join(pop.2020, by = "country.isocode") %>%
+  .$country.name %>%
+  knitr::kable(caption = "Missing Isocodes") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center") 
+```
+
+```{r Add_Population3}
+# Sudan and Kosovo Population
+covid19$N[which(covid19$country.name == "Sudan")] <- 
+  pop.2020$PopTotal[which(pop.2020$country.name == "Sudan")]
+covid19$N[which(covid19$country.name == "Kosovo")] <- 1811285
+```
+
+
+## Add Measures level to covid19
+
+```{r Add_Measures_level}
+covid19 <- covid19 %>%
+  group_by(country.alphacode, date) %>%
+  mutate(measure.level = max(0, measures$measure.level[
+    which(measures$country.alphacode == country.alphacode & 
+            measures$date <= date)])) %>%
+  ungroup()
+```
+
+
+## Add Test Positive rate (TPR)
+
+```{r Add_TPR}
+covid19 <- covid19 %>%
+  left_join(select(owd_data, country.alphacode, date, positive_rate)) %>%
+  mutate(TPR = positive_rate*100) %>%
+  select(-positive_rate)
+```
+
+```{r Drop_owd_data, include=FALSE}
+rm(owd_data)
+```
+
+
+## Add Variables
+
+### Add S (susceptible)
+
+```{r Add_S}
+# N = S + I + R; S = N - I - R
+covid19 <- covid19 %>% 
+  mutate(S = N - I.cum - R.cum)
+```
+
+
+### Add IR (Incidence Rate)
+
+```{r Add_IR}
+covid19 <- covid19 %>% 
+  mutate(IR = (I.cum / N) * 10^5)
+```
+
+
+### Add CFR (Confirmed Fatality rate) and M (Mortality)
+
+```{r ADD_CFR}
+covid19 <- covid19 %>%
+  mutate(CFR = ifelse(I.cum == 0, 0, D.cum / I.cum)*100, M = (D.cum / N)*10^5) 
+```
+
+The covid19 dataset looks like this:
+
+```{r Covid19_Summary}
+knitr::kable(head(covid19[1:10]), caption = "First rows of Covid data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+
+knitr::kable(head(covid19[11:20]), caption = "First rows of Covid data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+
+knitr::kable(tail(covid19[1:10]), caption = "Last rows of Covid data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+
+knitr::kable(tail(covid19[11:20]), caption = "First rows of Covid data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+
+# Visualization
+
+Let's start with looking at the current state of the pandemic and the progress of the pandemic.
+
+
+## Current situation
+
+We filter by date selecting only the last registered date:
+
+```{r visualization_current1}
+# Show the current situation
+covid19 %>% 
+  filter(date == last(date)) %>%
+  select(country.name, date, I.cum, D.cum, N, IR, CFR, measure.level) %>%
+  head(20) %>%
+  knitr::kable(caption = "First rows of Current Situation") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+
+```
+
+We will express the current situation of the pandemic, with respect to the number of infected and deceased people to date. We will highlight on a world map the countries with the highest number of infected and deceased and to achieve this we will use the `map_data` function contained in the `mapdata` library.
+
+With the `"world"` parameter, the `map_data` function gives us the geographic coordinates that allow us to graph the silhouettes of each country.
+
+```{r visualization_current2, warning = FALSE}
+library(mapdata)
+
+# World Map
+map_data("world") %>%
+  rename(country.name = region) %>%
+  head(20) %>%
+  knitr::kable(caption = "First rows of Map data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+In `mapdata` the names of the countries correspond to the `region` column.
+
+However, there are several countries whose names are not the same in covid19 and map_data ("world") dataset, so we will make some name changes to link both datasets.
+
+```{r visualization_current3, warning = FALSE}
+# Countries with different names in map.world 
+filter(covid19,date == last(date)) %>%
+  anti_join(
+    map_data("world") %>%
+      rename(country.name = region),
+    by = "country.name") %>%
+  distinct(country.name) %>%
+  head(15) %>%
+  knitr::kable(caption = "Some countries with different names in map.world") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+```{r visualization_current4, warning = FALSE}
+# Countries with different names in covid19
+map_data("world") %>%
+  rename(country.name = region) %>%
+  anti_join(filter(covid19,date == last(date)), 
+            by = "country.name") %>%
+  distinct(country.name) %>%
+  head(15) %>%
+  knitr::kable(caption = "Some countries with different names in covid19") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+```{r visualization_current5, warning = FALSE}
+map.world <- map_data("world") %>%
+  rename(country.name = region) %>%
+  mutate(country.name = case_when(
+    country.name == "Democratic Republic of the Congo" ~ "Congo, the Democratic Republic of the",
+    country.name == "Iran" ~ "Iran, Islamic Republic of",
+    country.name == "Laos" ~ "Lao People's Democratic Republic",
+    country.name == "Macedonia" ~ "Macedonia, the former Yugoslav Republic of",
+    country.name == "Moldova" ~ "Moldova, Republic of",
+    country.name == "Myanmar" ~ "Burma",
+    country.name == "Palestine" ~ "Palestinian Territory, Occupied",
+    country.name == "Republic of Congo" ~ "Congo",
+    country.name == "Syria" ~ "Syrian Arab Republic",
+    country.name == "Tanzania" ~ "Tanzania, United Republic of",
+    country.name == "Vatican" ~ "Holy See (Vatican City State)",
+    country.name == "UK" ~ "United Kingdom",        
+    country.name == "USA" ~ "United States",
+    country.name == "Antigua" ~ "Antigua and Barbuda",
+    country.name == "Barbuda" ~ "Antigua and Barbuda",
+    country.name == "Saint Kitts" ~ "Saint Kitts and Nevis",
+    country.name == "Nevis" ~ "Saint Kitts and Nevis",
+    country.name == "Grenadines" ~ "Saint Vincent and the Grenadines",
+    country.name == "Saint Vincent" ~ "Saint Vincent and the Grenadines",
+    country.name == "Trinidad" ~ "Trinidad and Tobago",
+    country.name == "Tobago" ~ "Trinidad and Tobago",
+    TRUE ~ country.name)
+  )
+```
+
+Now we can create the graph without any problem.
+
+We express with the yellow color the number of infected people and with the red color the number of deceased people. The intensity of the color indicates the countries that have the highest number of infected or deceased.
+
+
+**World map of Infected by Covid-19**
+
+```{r visualization_current6, warning = FALSE}
+# World map of Infected by Covid-19
+map.world %>%
+  left_join(filter(covid19,date == last(date)), by = "country.name") %>%
+  ggplot(aes(long, lat, group = group)) + 
+  geom_polygon(aes(fill = I.cum), color = "steelblue2", size = 0.1) + 
+  scale_fill_gradient(low = "white", high = "yellow3",
+                      breaks = 10^(1:7), trans = "log10", 
+                      na.value = "white", labels = comma) +
+  theme_minimal() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(), 
+        axis.title = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.background = element_rect(
+          colour= "black", fill = "lightblue", size = 0.5),
+        panel.grid = element_blank(),
+        legend.text = element_text(size = 6, ),
+        legend.title = element_text(size = 8)) +
+  ggtitle("Current situation: World map of infected by Covid-19") +
+  labs(fill = "Infected")
+```
+
+With greater intensity are observed: the United States, Brazil, India, Russia and France, which are the countries with the highest number of infected people at present; while with less intensity they are observed:  Cambodia, Laos, Mongolia and Tanzania.
+
+
+**World map of Deaths by Covid-19**
+
+```{r visualization_current7, warning = FALSE}
+# World map of Deaths by Covid-19
+map.world %>%
+  left_join(filter(covid19,date == last(date)), by = "country.name") %>%
+  ggplot(aes(long, lat, group = group)) + 
+  geom_polygon(aes(fill = D.cum), color = "steelblue2", size = 0.1) + 
+  scale_fill_gradient(low = "white", high = "red3",
+                      breaks = 10^(1:7), trans = "log10", 
+                      na.value = "white", labels = comma) +
+  theme_minimal() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(), 
+        axis.title = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.background = element_rect(
+          colour= "black", fill = "lightblue", size = 0.5),
+        panel.grid = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 8)) +
+  ggtitle("Current situation: World map of deaths by Covid-19") +
+  labs(fill = "Deaths")
+```
+
+With greater intensity are observed: the United States, Brazil, India, Mexico and Italy, which are the countries with the highest number of deceased persons at present; while with less intensity are observed: Mongolia, Tanzania, Thailand, Uruguay and Vietnam.
+
+
+## Progress of the disease
+
+Let's now see the situation of the pandemic in other months:
+
+```{r visualization_progress1, warning = FALSE}
+# Infected
+merge(map.world,
+      data.frame(date = as.Date(seq(first(covid19$date), last(covid19$date), 60)))) %>%
+  left_join(select(filter(covid19, 
+                          date %in% seq(first(covid19$date), last(covid19$date), 60)),
+                   country.name, date, I.cum)) %>%
+  ggplot(aes(long, lat, group = group)) + 
+  geom_polygon(aes(fill = I.cum), color = "steelblue2", size = 0.1) + 
+  scale_fill_gradient(low = "white", high = "yellow3",
+                      breaks = 10^(1:7), trans = "log10", 
+                      na.value = "white", labels = comma) +
+  theme_minimal() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(), 
+        axis.title = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.background = element_rect(
+          colour= "black", fill = "lightblue", size = 0.5),
+        panel.grid = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 8)) +
+  ggtitle("Progress of the disease: World map of Infected by Covid-19") +
+  labs(fill = "Infected") +
+  facet_wrap(~ month(date, label = TRUE, abbr = FALSE), ncol = 2) 
+```
+
+```{r visualization_progress2, warning = FALSE}
+merge(map.world,
+      data.frame(date = as.Date(seq(first(covid19$date), last(covid19$date), 60)))) %>%
+  left_join(select(filter(covid19, 
+                          date %in% seq(first(covid19$date), last(covid19$date), 60)),
+                   country.name, date, D.cum)) %>%
+  ggplot(aes(long, lat, group = group)) + 
+  geom_polygon(aes(fill = D.cum), color = "steelblue2", size = 0.1) + 
+  scale_fill_gradient(low = "white", high = "red3",
+                      breaks = 10^(1:7), trans = "log10", 
+                      na.value = "white", labels = comma) +
+  theme_minimal() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(), 
+        axis.title = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.background = element_rect(
+          colour= "black", fill = "lightblue", size = 0.5),
+        panel.grid = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 8)) +
+  ggtitle("Progress of the disease: World map of Deaths by Covid-19") +
+  labs(fill = "Infected") +
+  facet_wrap(~ month(date, label = TRUE, abbr = FALSE), ncol = 2) 
+```
+
+In Janaury 2020 the infection was only located in Asia and North America, by March almost all the countries of Asia, America, Europe and Oceania already had several hundred cases, Africa still did not present many cases. In July, the virus was practically spread all over the planet.
+
+Let's look at the daily cases of infected and deceased people at different stages of the pandemic:
+
+```{r visualization_progress3, warning = FALSE}
+# daily Infected
+map.world %>%
+  ggplot() + 
+  geom_polygon(aes(x= long, y = lat, group = group),
+               fill = "white", color = "steelblue2") + 
+  geom_point(data = filter(covid19,date %in% 
+                             as.Date(seq(ceiling_date(first(covid19$date), "month"), 
+                                         last(covid19$date), by = "2 month"))), 
+             aes(longitude, latitude, size = I), 
+             color = "yellow3", alpha = 0.8) +
+  theme_minimal() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(), 
+        axis.title = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.background = element_rect(
+          colour= "black", fill = "lightblue", size = 0.5),
+        panel.grid = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 8)) +
+  labs(title = "World map of Infected by Covid-19", size = "Amount of Infected") +
+  facet_wrap(~ month(date, label = TRUE, abbr = FALSE), ncol = 2)
+```
+
+```{r visualization_progress4, warning = FALSE}
+# daily Deaths
+map.world %>%
+  ggplot() + 
+  geom_polygon(aes(x= long, y = lat, group = group),
+               fill = "white", color = "steelblue2") + 
+  geom_point(data = filter(covid19,date %in% 
+                             as.Date(seq(ceiling_date(first(covid19$date), "month"), 
+                                         last(covid19$date), by = "2 month"))), 
+             aes(longitude, latitude, size = D), 
+             color = "red3", alpha = 0.8) +
+  theme_minimal() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(), 
+        axis.title = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.background = element_rect(
+          colour= "black", fill = "lightblue", size = 0.5),
+        panel.grid = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 8)) +
+  labs(title = "World map of Deaths by Covid-19", size = "Amount of Deaths") +
+  facet_wrap(~ month(date, label = TRUE, abbr = FALSE), ncol = 2)
+```
+
+
+## Progress of infections and deaths from the pandemic.
+
+```{r visualization_progress5, warning = FALSE}
+# Progress of infections and deaths from the pandemic.
+grid.arrange(
+  # Infected
+  covid19 %>% 
+    group_by(date) %>%
+    summarise(I = sum(I)) %>%
+    ggplot() +
+    geom_area(aes(x = date, y = I), size = 1, colour = "yellow3", 
+              fill = "yellow", alpha = 0.5) +
+    scale_y_continuous(labels = comma) +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+    labs(title = "daily Infected Values", x = "Months", y = "Infected") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+          axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+          title = element_text(size = 12, color = "yellow4", face = "bold")) , 
+  # Deaths    
+  covid19 %>% 
+    group_by(date) %>%
+    summarise(D = sum(D)) %>%
+    ggplot() +
+    geom_area(aes(x = date, y = D), size = 1, colour = "red3", 
+              fill = "red", alpha = 0.5) +
+    scale_y_continuous(labels = comma) +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+    labs(title = "daily Deaths Values", x = "Months", y = "Deaths") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+          axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+          title = element_text(size = 12, color = "red4", face = "bold")),
+  # IR
+  covid19 %>% 
+    group_by(date) %>%
+    summarise(IR = (sum(I.cum) / sum(N))*10^5) %>%
+    ggplot() +
+    geom_area(aes(x = date, y = IR), size = 1, colour = "yellow3", 
+              fill = "yellow", alpha = 0.5) +
+    scale_y_continuous(labels = comma) +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+    labs(title = "IR Values", x = "Months", y = "IR") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+          axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+          title = element_text(size = 12, color = "yellow4", face = "bold")) , 
+  # CFR    
+  covid19 %>% 
+    group_by(date) %>%
+    summarise(CFR = (sum(D.cum) / sum(I.cum))*100) %>%
+    ggplot() +
+    geom_area(aes(x = date, y = CFR), size = 1, colour = "red3", 
+              fill = "red", alpha = 0.5) +
+    scale_y_continuous(labels = comma) +
+    scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+    labs(title = "CFR Values", x = "Months", y = "CFR") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+          axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+          title = element_text(size = 12, color = "red4", face = "bold")) )
+```
+
+As the pandemic progresses, we can observe that although the number of infected and IR has increased, the lethality of the disease (CFR) has decreased, we will delve into this behavior later.
+
+So far we have observed the pandemic globally, now we will see the pandemic by continent and region.
+
+
+## The pandemic by continent
+
+The spread of the pandemic has been different in each continent, this behavior will be shown below:
+
+```{r visualization_continent1, warning = FALSE}
+# daily Infected
+covid19 %>%
+  group_by(continent.name, date) %>%
+  summarise(I = sum(I)) %>%
+  ggplot(aes(x = date, y = I)) +
+  geom_col(col = "yellow3", fill = "yellow", size = 0.5, alpha = 0.4) +
+  facet_wrap(~ continent.name, ncol = 1, scale = "free_y") +
+  scale_y_continuous(labels = comma) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        strip.text.x = element_text(size = 10, color="black", face ="bold"),
+        title = element_text(size = 12, color = "yellow4", face = "bold")) +
+  labs(title = "daily Infected Values", x = "Months", y = "Infected")
+```
+
+```{r visualization_continent2, warning = FALSE}
+# Acumulated Infected
+covid19 %>%
+  group_by(continent.name, date) %>%
+  summarise(I.cum = sum(I.cum)) %>%
+  ggplot() +
+  geom_col(aes(x = date, y = I.cum),
+           col = "yellow3", fill = "yellow", size = 0.5, alpha = 0.4) +
+  facet_wrap(~ continent.name, ncol = 1, scale = "free_y") +
+  scale_y_continuous(labels = comma) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        strip.text.x = element_text(size = 10, color="black", face ="bold"),
+        title = element_text(size = 12, color = "yellow4", face = "bold")) +
+  labs(title = "Acumulated Infected Values", x = "Months", y = "Infected")
+```
+
+The first thing we can observe is that all the continents have presented a couple of waves of contagion, with different amplitudes and lengths. We will study the waves later.
+
+```{r visualization_continent3, warning = FALSE}
+# daily Deaths
+covid19 %>%
+  group_by(continent.name, date) %>%
+  summarise(D.dairy = sum(D)) %>%
+  ggplot() +
+  geom_col(aes(x = date, y = D.dairy),
+           col = "red3", fill = "red", size = 0.5, alpha = 0.4) +
+  facet_wrap(~ continent.name, ncol = 1, scale = "free_y") +
+  scale_y_continuous(labels = comma) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  theme_bw() +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        strip.text.x = element_text(size = 10, color="black", face ="bold"),
+        title = element_text(size = 12, color = "red4", face = "bold")) +
+  labs(title = "daily Deaths Values", x = "Months", y = "Deaths")
+```
+
+```{r visualization_continent4, warning = FALSE}
+# Acumulated Deaths
+covid19 %>%
+  group_by(continent.name, date) %>%
+  summarise(D.cum = sum(D.cum)) %>%
+  ggplot() +
+  geom_col(aes(x = date, y = D.cum),
+           col = "red3", fill = "red", size = 0.5, alpha = 0.4) +
+  facet_wrap(~ continent.name, ncol = 1, scale = "free_y") +
+  scale_y_continuous(labels = comma) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        strip.text.x = element_text(size = 10, color="black", face ="bold"),
+        title = element_text(size = 12, color = "red4", face = "bold")) +
+  labs(title = "Acumulated Deaths Values", x = "Months", y = "Deaths")
+```
+
+With regard to deaths, a couple of waves are also observed, reinforcing the correlation that exists between the IR and CFR.
+
+
+## The pandemic by region
+
+You can also notice differences in the spread of the pandemic at the level of the regions of the continents.
+
+```{r visualization_region1, warning = FALSE}
+# Daily Infected
+covid19 %>%
+  group_by(region.name, date) %>%
+  summarise(I = sum(I)) %>%
+  ggplot(aes(x = date, y = I)) +
+  geom_col(col = "yellow3", fill = "yellow", size = 0.5, alpha = 0.4) +
+  facet_wrap(~ region.name, ncol = 4, scale = "free_y") +
+  scale_y_continuous(labels = comma) +
+  scale_x_date(date_breaks = "2 month", date_labels = "%b") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 6, color = "black"),
+        axis.text.y = element_text(size = 6, color = "black"),
+        axis.title.x = element_text(size = 8, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 8, color = "black", face = "bold"),
+        strip.text.x = element_text(size = 8, color="black", face ="bold"),
+        title = element_text(size = 12, color = "yellow4", face = "bold")) +
+  labs(title = "Daily Infected Values", x = "Months", y = "Infected")
+```
+
+```{r visualization_region2, warning = FALSE}
+# Acumulated Infected
+covid19 %>%
+  group_by(region.name, date) %>%
+  summarise(I.cum = sum(I.cum)) %>%
+  ggplot() +
+  geom_col(aes(x = date, y = I.cum),
+           col = "yellow3", fill = "yellow", size = 0.5, alpha = 0.4) +
+  facet_wrap(~ region.name, ncol = 4, scale = "free_y") +
+  scale_y_continuous(labels = comma) +
+  scale_x_date(date_breaks = "2 month", date_labels = "%b") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 6, color = "black"),
+        axis.text.y = element_text(size = 6, color = "black"),
+        axis.title.x = element_text(size = 8, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 8, color = "black", face = "bold"),
+        strip.text.x = element_text(size = 8, color="black", face ="bold"),
+        title = element_text(size = 12, color = "yellow4", face = "bold")) +
+  labs(title = "Acumulated Infected Values", x = "Months", y = "Infected")
+```
+
+```{r visualization_region3, warning = FALSE}
+# Daily Deaths
+covid19 %>%
+  group_by(region.name, date) %>%
+  summarise(D.dairy = sum(D)) %>%
+  ggplot() +
+  geom_col(aes(x = date, y = D.dairy),
+           col = "red3", fill = "red", size = 0.5, alpha = 0.4) +
+  facet_wrap(~ region.name, ncol = 4, scale = "free_y") +
+  scale_y_continuous(labels = comma) +
+  scale_x_date(date_breaks = "2 month", date_labels = "%b") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 6, color = "black"),
+        axis.text.y = element_text(size = 6, color = "black"),
+        axis.title.x = element_text(size = 8, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 8, color = "black", face = "bold"),
+        strip.text.x = element_text(size = 8, color="black", face ="bold"),
+        title = element_text(size = 12, color = "red4", face = "bold")) +
+  labs(title = "Daily Deaths Values", x = "Months", y = "Deaths")
+```
+
+```{r visualization_region4, warning = FALSE}
+# Acumulated Deaths
+covid19 %>%
+  group_by(region.name, date) %>%
+  summarise(D.cum = sum(D.cum)) %>%
+  ggplot() +
+  geom_col(aes(x = date, y = D.cum),
+           col = "red3", fill = "red", size = 0.5, alpha = 0.4) +
+  facet_wrap(~ region.name, ncol = 4, scale = "free_y") +
+  scale_y_continuous(labels = comma) +
+  scale_x_date(date_breaks = "2 month", date_labels = "%b") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 6, color = "black"),
+        axis.text.y = element_text(size = 6, color = "black"),
+        axis.title.x = element_text(size = 8, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 8, color = "black", face = "bold"),
+        strip.text.x = element_text(size = 8, color="black", face ="bold"),
+        title = element_text(size = 12, color = "red4", face = "bold")) +
+  labs(title = "Acumulated Deaths Values", x = "Months", y = "Deaths")
+```
+
+When we visualize the pandemic by Region we find differences, some regions still experience a wave of contagion, such as Southern Asia and Eastern Europe; while in the North America region three waves are displayed.
+
+
+## Latitudes
+
+Next, the pandemic data will be explored according to the geographical position of each country. We will use latitude to compare the distribution of the data in the Northern and Southern Hemispheres and in and with respect to the Tropics.
+
+```{r visualization_latitudes1, warning = FALSE}
+grid.arrange(nrow = 1, 
+             map.world %>%
+               left_join(Isocode) %>%
+               mutate(latitude = ifelse(is.na(latitude), lat, latitude)) %>%
+               ggplot(aes(long, lat, group = group,
+                          fill = ifelse(latitude > 0, "North", "Sourth"))) + 
+               geom_polygon(color = "steelblue2",  size = 0.1) +
+               scale_fill_manual(values = c("blue2","tan2")) +
+               scale_y_continuous(breaks = c(-50, -23.27, 0, 23.27, 50)) +
+               theme(axis.title = element_blank(),
+                     axis.text.x = element_blank(),
+                     axis.text.y = element_text(size = 8, color = "red", face ="bold"),
+                     legend.text = element_text(size = 8, color = "black", face ="bold"),
+                     legend.title = element_blank(),
+                     legend.position = "bottom",
+                     panel.grid = element_blank(),
+                     panel.grid.major.y = element_line(colour = "red"),
+                     panel.background = element_rect(colour= "black", 
+                                                     fill = "lightblue", 
+                                                     size = 0.5)) +
+               ggtitle("Hemispheres") + labs(fill = "Hemispheres") ,
+             map.world %>%
+               left_join(Isocode) %>%
+               mutate(latitude = ifelse(is.na(latitude), lat, latitude)) %>%
+               ggplot(aes(long, lat, group = group,
+                          fill = ifelse(!is.na(latitude) & latitude < 23.27 & latitude > -23.27, 
+                                        "Tropical", "No Tropical"))) + 
+               geom_polygon(color = "steelblue2",  size = 0.1) +
+               scale_fill_manual(values = c("lightgray","gold")) +
+               scale_y_continuous(breaks = c(-50, -23.27, 0, 23.27, 50)) +
+               theme(axis.title = element_blank(),
+                     axis.text.x = element_blank(),
+                     axis.text.y = element_text(size = 8, color = "red", face ="bold"),
+                     legend.text = element_text(size = 8, color = "black", face ="bold"),
+                     legend.title = element_blank(),
+                     legend.position = "bottom",
+                     panel.grid = element_blank(),
+                     panel.grid.major.y = element_line(colour = "red"),
+                     panel.background = element_rect(colour= "black", 
+                                                     fill = "lightblue", 
+                                                     size = 0.5)) +
+               ggtitle("Intertropical Zone") + labs(fill = "Zones") )
+```
+
+
+### Hemispheres
+
+```{r visualization_Hemisphere1, warning = FALSE, fig.height = 3}
+grid.arrange(ncol = 3,
+             # Popultation by Hemisphere
+             filter(covid19, date == last(date)) %>%
+               mutate(hemisphere = ifelse(latitude > 0, "North", "Sourth")) %>%
+               group_by(hemisphere) %>%
+               summarise(N = sum(N)) %>%
+               ggplot(aes(x = hemisphere, y = N, fill = hemisphere)) +
+               geom_col() + 
+               scale_y_continuous(labels = label_number_si()) +
+               scale_fill_manual(values = c("blue2","tan2")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 8, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.text = element_text(size = 6, color = "black"),
+                     legend.title = element_blank(),
+                     legend.position = "left",
+                     title = element_text(size = 9, color = "blue4", face = "bold")) +
+               labs(title = "Population", x = element_blank(), y = "Population"),
+             # Infected by Hemisphere
+             covid19 %>%
+               mutate(hemisphere = ifelse(latitude > 0, "North", "Sourth")) %>%
+               group_by(hemisphere, date) %>%
+               summarise(I.cum = sum(I.cum)) %>%
+               ggplot(aes(x = date, y = I.cum, color = hemisphere, fill = hemisphere)) +
+               geom_line(size = 1) +
+               geom_area(position = "dodge") +
+               scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_color_manual(values = c("blue2","tan2")) +
+               scale_fill_manual(values = c("blue2","tan2")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.position = "none",
+                     title = element_text(size = 9, color = "yellow4", face = "bold")) +
+               labs(title = "Infected", x = element_blank(), y = "Infected") ,
+             # Deaths by Hemisphere 
+             covid19 %>%
+               mutate(hemisphere = ifelse(latitude > 0, "North", "Sourth")) %>%
+               group_by(hemisphere, date) %>%
+               summarise(D.cum = sum(D.cum)) %>%
+               ggplot(aes(x = date, y = D.cum, color = hemisphere, fill = hemisphere)) +
+               geom_line(size = 1) +
+               geom_area(position = "dodge") +
+               scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_color_manual(values = c("blue2","tan2")) +
+               scale_fill_manual(values = c("blue2","tan2")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.position = "none",
+                     title = element_text(size = 9, color = "red4", face = "bold")) +
+               labs(title = "Deaths", x = element_blank(), y = "Deaths") )
+```
+
+
+The Hemispheres are located above and below the equator (latitude = 0):
+
+* North: latitude > 0 
+* Sourth: latitude < 0
+
+
+The population of the Northern Hemisphere and higher than that of the Southern Hemisphere, and as expected, in that proportion is the number of infected.
+
+```{r visualization_Hemisphere2, warning = FALSE}
+# IR and CFR by Hemisphere
+grid.arrange(ncol = 2,
+             # Infected rate by Hemisphere
+             covid19 %>%
+               mutate(Hemisphere = ifelse(latitude > 0, "North", "Sourth")) %>%
+               group_by(Hemisphere, date) %>%
+               summarise(IR = (sum(I.cum)/sum(N))*10^5) %>%
+               ggplot(aes(x = date, y = IR, color = Hemisphere, fill = Hemisphere)) +
+               geom_line(size = 1) +
+               geom_area(position = "dodge", alpha = 0.5) +
+               scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+               scale_y_continuous(labels = comma) +
+               scale_color_manual(values = c("blue2","tan2")) +
+               scale_fill_manual(values = c("blue2","tan2")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.position = "bottom",
+                     title = element_text(size = 9, face = "bold")) +
+               labs(title = "Infected Rate", x = element_blank(), y = "Infected") ,
+             # Infected rate by Hemisphere
+             covid19 %>%
+               mutate(Hemisphere = ifelse(latitude > 0, "North", "Sourth")) %>%
+               group_by(Hemisphere, date) %>%
+               summarise(IR = mean(IR)) %>%
+               ggplot(aes(x = date, y = IR, color = Hemisphere, fill = Hemisphere)) +
+               geom_line(size = 1) +
+               geom_area(position = "dodge", alpha = 0.5) +
+               scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_color_manual(values = c("blue2","tan2")) +
+               scale_fill_manual(values = c("blue2","tan2")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.position = "bottom",
+                     title = element_text(size = 9, face = "bold")) +
+               labs(title = "Infected Rate: mean(IR)", x = element_blank(), y = "Infected"),
+             # Deaths rate by Hemisphere
+             covid19 %>%
+               mutate(Hemisphere = ifelse(latitude > 0, "North", "Sourth")) %>%
+               group_by(Hemisphere, date) %>%
+               summarise(CFR = (sum(D.cum)/sum(I.cum))*100) %>%
+               ggplot(aes(x = date, y = CFR, color = Hemisphere, fill = Hemisphere)) +
+               geom_line(size = 1) +
+               geom_area(position = "dodge", alpha = 0.5) +
+               scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_color_manual(values = c("blue2","tan2")) +
+               scale_fill_manual(values = c("blue2","tan2")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.position = "bottom",
+                     title = element_text(size = 9, face = "bold")) +
+               labs(title = "Deaths Rate", x = element_blank(), y = "Infected"),
+             # Deaths rate by Hemisphere
+             covid19 %>%
+               mutate(Hemisphere = ifelse(latitude > 0, "North", "Sourth")) %>%
+               group_by(Hemisphere, date) %>%
+               summarise(CFR = mean(CFR)) %>%
+               ggplot(aes(x = date, y = CFR, color = Hemisphere, fill = Hemisphere)) +
+               geom_line(size = 1) +
+               geom_area(position = "dodge", alpha = 0.5) +
+               scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_color_manual(values = c("blue2","tan2")) +
+               scale_fill_manual(values = c("blue2","tan2")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.position = "bottom",
+                     title = element_text(size = 9, face = "bold")) +
+               labs(title = "Deaths Rate: mean(CFR)", x = element_blank(), y = "Infected"))
+```
+
+Because the population of Brazil and Indonesia represents 50% of the population of the Southern Hemisphere, the average IR varies significantly from the IR for this hemisphere if it is calculated in a summarized way: Total Infected / Total Population.
+
+```{r visualization_Hemisphere3, warning = FALSE}
+# Influence of Brazil and Indonesia 
+filter(covid19, date == last(date) & latitude < 0) %>%
+  mutate(countries = ifelse(N > 10^8, "Brazil and Indonesia", "Others")) %>%
+  group_by(countries) %>% 
+  summarise(quantity = n(), Infected = sum(I.cum), Population = sum(N), 
+            IR.mean = mean(IR), IR = sum(I.cum)/sum(N)*10^5) %>%
+  knitr::kable(caption = "Influence of Brazil and Indonesia") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+
+### Intertropical Zone
+
+The intertropical zone is the region of the planet that is located between the tropics of Cancer and Capricorn: latitude < 23.27 and latitude > -23.27.
+
+```{r visualization_zone1, warning = FALSE}
+grid.arrange(ncol = 3,
+             # Popultation by zone
+             filter(covid19, date == last(date)) %>%
+               mutate(zone = ifelse(latitude < 23.27 & latitude > -23.27, 
+                                    "Tropical", "No Tropical")) %>%
+               group_by(zone) %>%
+               summarise(N = sum(N)) %>%
+               ggplot(aes(x = zone, y = N, fill = zone)) +
+               geom_col() + 
+               scale_y_continuous(labels = label_number_si()) +
+               scale_fill_manual(values = c("lightgrey","gold")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.text = element_text(size = 6, color = "black"),
+                     legend.title = element_blank(),
+                     legend.position = "left",
+                     title = element_text(size = 9, color = "blue4", face = "bold")) +
+               labs(title = "Population", x = element_blank(), y = "Population"),
+             # Infected by zone
+             covid19 %>%
+               mutate(zone = ifelse(latitude < 23.27 & latitude > -23.27, 
+                                    "Tropical", "No Tropical")) %>%
+               group_by(zone, date) %>%
+               summarise(I.cum = sum(I.cum)) %>%
+               ggplot(aes(x = date, y = I.cum, color = zone, fill = zone)) +
+               geom_line(size = 1) +
+               geom_area(position = "dodge") +
+               scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_color_manual(values = c("lightgrey","gold")) +
+               scale_fill_manual(values = c("lightgrey","gold")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.position = "none",
+                     title = element_text(size = 9, color = "yellow4", face = "bold")) +
+               labs(title = "Infected", x = element_blank(), y = "Infected"),
+             # Deaths by zone 
+             covid19 %>%
+               mutate(zone = ifelse(latitude < 23.27 & latitude > -23.27, 
+                                    "Tropical", "No Tropical")) %>%
+               group_by(zone, date) %>%
+               summarise(D.cum = sum(D.cum)) %>%
+               ggplot(aes(x = date, y = D.cum, color = zone, fill = zone)) +
+               geom_line(size = 1) +
+               geom_area(position = "dodge") +
+               scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_color_manual(values = c("lightgrey","gold")) +
+               scale_fill_manual(values = c("lightgrey","gold")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.position = "none",
+                     title = element_text(size = 9, color = "red4", face = "bold")) +
+               labs(title = "Deaths", x = element_blank(), y = "Deaths") )
+```
+
+```{r visualization_zone2, warning = FALSE}
+grid.arrange(ncol = 2,
+             # Infected rate by zone
+             covid19 %>%
+               mutate(Zone = ifelse(latitude < 23.27 & latitude > -23.27, 
+                                    "Tropical", "No Tropical")) %>%
+               group_by(Zone, date) %>%
+               summarise(IR = (sum(I.cum)/sum(N))*10^5) %>%
+               ggplot(aes(x = date, y = IR, color = Zone, fill = Zone)) +
+               geom_line(size = 1) +
+               geom_area(position = "dodge", alpha = 0.5) +
+               scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_color_manual(values = c("lightgrey","gold")) +
+               scale_fill_manual(values = c("lightgrey","gold")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.position = "bottom",
+                     title = element_text(size = 9, face = "bold")) +
+               labs(title = "Infected Rate", x = element_blank(), y = "Infected") ,
+             # Infected rate by zone
+             covid19 %>%
+               mutate(Zone = ifelse(latitude < 23.27 & latitude > -23.27, 
+                                    "Tropical", "No Tropical")) %>%
+               group_by(Zone, date) %>%
+               summarise(IR = mean(IR)) %>%
+               ggplot(aes(x = date, y = IR, color = Zone, fill = Zone)) +
+               geom_line(size = 1) +
+               geom_area(position = "dodge", alpha = 0.5) +
+               scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_color_manual(values = c("lightgrey","gold")) +
+               scale_fill_manual(values = c("lightgrey","gold")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.position = "bottom",
+                     title = element_text(size = 9, face = "bold")) +
+               labs(title = "Infected Rate: mean(IR)", x = element_blank(), y = "Infected"),
+             # Deaths rate by zone
+             covid19 %>%
+               mutate(Zone = ifelse(latitude < 23.27 & latitude > -23.27, 
+                                    "Tropical", "No Tropical")) %>%
+               group_by(Zone, date) %>%
+               summarise(CFR = (sum(D.cum)/sum(I.cum))*100) %>%
+               ggplot(aes(x = date, y = CFR, color = Zone, fill = Zone)) +
+               geom_line(size = 1) +
+               geom_area(position = "dodge", alpha = 0.5) +
+               scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_color_manual(values = c("lightgrey","gold")) +
+               scale_fill_manual(values = c("lightgrey","gold")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.position = "bottom",
+                     title = element_text(size = 9, face = "bold")) +
+               labs(title = "Deaths Rate", x = element_blank(), y = "Infected"),
+             # Deaths rate by zone
+             covid19 %>%
+               mutate(Zone = ifelse(latitude < 23.27 & latitude > -23.27, 
+                                    "Tropical", "No Tropical")) %>%
+               group_by(Zone, date) %>%
+               summarise(CFR = mean(CFR)) %>%
+               ggplot(aes(x = date, y = CFR, color = Zone, fill = Zone)) +
+               geom_line(size = 1) +
+               geom_area(position = "dodge", alpha = 0.5) +
+               scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_color_manual(values = c("lightgrey","gold")) +
+               scale_fill_manual(values = c("lightgrey","gold")) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_blank(),
+                     legend.position = "bottom",
+                     title = element_text(size = 9, face = "bold")) +
+               labs(title = "Deaths Rate: mean(CFR)", x = element_blank(), y = "Infected"))
+```
+
+It is observed that the infection rate (IR) is higher outside the intertropical zone than within it. On the other hand, the case fatality rate (CFR) is similar in both areas.
+
+
+## Seasons
+
+The weather and other aspects associated with the seasons of the year (Winter, Spring, Summer and Autumn) could be a factor that affects the spread of the virus. The seasons of the year vary depending on the date of the year and the latitude in which a country is located. Next we show a table with the values of the `date` and `latitude` columns that determine in which season a country is located during the pandemic:
+
+**Season**|**North (latitude > 0)**|**Sourth (latitude < 0)** 
+----------|:----------------------:|:-----------------------:|
+Spring | 21/03 - 20/06 | 21/09 - 20/19
+Summer | 21/06 - 20/09 | 21/12 - 20/03
+Fall   | 21/09 - 20/12 | 21/03 - 20/06
+Winter | 21/12 - 20/03 | 21/06 - 20/09
+
+```{r Season}
+covid19 <- covid19 %>%
+  mutate(md = format(date, "%m-%d"),
+         season = ifelse(latitude > 0, 
+                         case_when(between(md, "01-01", "03-20") ~ "winter",
+                                   between(md, "03-21", "06-20") ~ "spring",
+                                   between(md, "06-21", "09-20") ~ "summer",
+                                   between(md, "09-21", "12-20") ~ "fall",
+                                   between(md, "12-21", "12-31") ~ "winter"),
+                         case_when(between(md, "01-01", "03-20") ~ "summer",
+                                   between(md, "03-21", "06-20") ~ "fall",
+                                   between(md, "06-21", "09-20") ~ "winter",
+                                   between(md, "09-21", "12-20") ~ "spring",
+                                   between(md, "12-21", "12-31") ~ "winter"))) %>%
+  select(-md)
+
+```
+
+```{r visualization_season1, warning = FALSE}
+# Infected by season
+covid19 %>%
+  group_by(season, continent.name) %>%
+  summarise(I.cum = sum(I)) %>%
+  ggplot(aes(x = reorder(season, I.cum), y = I.cum, 
+             fill = continent.name)) +
+  geom_col() +
+  scale_y_continuous(labels = label_number_si()) +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"),
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8)) +
+  labs(title = "Infected Summary by season", x = "Seasons", y = "Infected", fill = "")
+```
+
+```{r visualization_season2, warning = FALSE}
+# Deaths by season
+covid19 %>%
+  group_by(season, continent.name) %>%
+  summarise(D.cum = sum(D)) %>%
+  ggplot(aes(x = reorder(season, D.cum), y = D.cum, 
+             fill = continent.name)) +
+  geom_col() +
+  scale_y_continuous(labels = label_number_si()) +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"),
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8)) +
+  labs(title = "Deaths Summary by season", 
+       x = "Seasons", y = "Deaths", fill = "")
+```
+
+The season of the year with the highest number of infections and deaths is autumn.
+
+```{r  visualization_season3, warning = FALSE}
+N.total <- sum(filter(covid19, date == last(date))$N)
+
+covid19 %>%
+  group_by(season, continent.name) %>%
+  summarise(I.cum = sum(I),
+            D.cum = sum(D),
+            IR = (I.cum / N.total) * 10^5,
+            CFR = (D.cum / I.cum) * 100) %>%
+  select(-I.cum, -D.cum) %>%
+  gather("Type", "Value", -season, -continent.name) %>%
+  ggplot(aes(x = season, y = Value, fill = continent.name)) +
+  geom_col() +
+  facet_wrap(. ~ Type, ncol = 1, scales = "free_y", 
+             labeller = as_labeller(c(
+               'I.cum' = "Infected Acumulated",
+               'D.cum' = "Deaths Acumulated",
+               'IR' = "Infected Rate",
+               'CFR' = "Fatality Rate"))) +
+  scale_x_reordered() +
+  scale_y_continuous(labels = comma) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 8, color = "black", face = "bold"),
+        legend.text = element_text(size = 8, color="black"),
+        legend.title = element_text(size = 10, color="black", face = "bold"),
+        strip.text.x = element_text(size = 10, color="black", face = "bold")) +
+  labs(title = "Indicators by Season", 
+       x = "", y = "Indicators Value", fill = "Continents")
+```
+
+Spring is the season of the year with the highest fatality rates.
+
+
+## Test Positive Rate
+
+We visualize the comparison of the test positivity rate (TPR) to detect covid19 with respect to the number of infected.
+
+### Comparison of daily cases and proportion of positive tests in some countries.
+
+To present the TPR and IR curves in the same graph, we will calculate a scale adjustment coefficient (coef) that we will use to adjust a second vertical axis associated with the TPR values.
+
+We will show this comparison for the following countries: Canada, Chile, Israel, Italy, Qatar and South Korea.
+
+```{r visualization_TPR1, warning = FALSE}
+# Comparison of daily cases and proportion of positive tests in some countries.
+covid19.example <- filter(covid19,
+                          country.alphacode %in% c("CAN","CHL","KOR","QAT","ISR","ITA")) %>%
+  select(country.name, date, I, TPR)
+
+coef <- max(covid19.example$I, na.rm = T) / max(covid19.example$TPR, na.rm = T)
+```
+
+```{r visualization_TPR2, warning = FALSE, fig.align = 'center'}
+covid19.example %>%
+  mutate(TPR = TPR * coef) %>%
+  gather("Type", "Value",-country.name, -date) %>%
+  ggplot(aes(x = date, y = Value, color = Type)) +
+  geom_line(size = 1) +
+  scale_y_continuous(labels = label_number_si(), 
+                     sec.axis = sec_axis(~ . / coef, 
+                                         name = "Test Positive Rate (TPR)",
+                                         labels = label_number_si())) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  scale_color_manual(values = c("yellow3","blue3"),
+                     labels = c("daily Infected","Positive Test Rate")) +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y.right = element_text(size = 8, color = "black", angle = 90),
+        legend.position = "bottom",
+        title = element_text(size = 12, color = "black", face = "bold"),
+        strip.background = element_rect(colour = "black", fill = "white", 
+                                        linetype = "blank")) + 
+  labs(title = "Daily infected and TPR", x = "Months", y = "Daily Infected", color = "") +
+  facet_wrap(. ~ country.name, ncol = 2, scale = "free_y")
+```
+
+
+### Comparison of daily cases and proportion of positive tests for each continent.
+
+Now let's see the behavior of the TPR with respect to the IR for each continent:
+
+```{r visualization_TPR3, warning = FALSE}
+covid19.example <- group_by(covid19, continent.name, date) %>%
+  summarise(I = mean(I, na.rm = T), 
+            TPR = mean(TPR, na.rm = T))
+
+coef <- max(covid19.example$I, na.rm = T) / max(covid19.example$TPR, na.rm = T)
+```
+
+```{r visualization_TPR4, warning = FALSE, fig.align = 'center'}
+covid19.example %>%
+  mutate(TPR = TPR * coef) %>%
+  gather("Type", "Value",-continent.name, -date) %>%
+  ggplot(aes(x = date, y = Value, color = Type)) +
+  geom_line(size = 1) +
+  scale_y_continuous(labels = label_number_si(), 
+                     sec.axis = sec_axis(~ . / coef, 
+                                         name = "Test Positive Rate (TPR)",
+                                         labels = label_number_si())) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  scale_color_manual(values = c("yellow3","blue3"),
+                     labels = c("daily Infected","Positive Test Rate")) +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y.right = element_text(size = 8, color = "black", angle = 90),
+        legend.position = "bottom",
+        title = element_text(size = 12, color = "black", face = "bold"),
+        strip.background = element_rect(colour = "black", fill = "white", 
+                                        linetype = "blank")) + 
+  labs(title = "Daily infected and TPR", x = "Months", y = "Daily Infected", color = "") +
+  facet_wrap(. ~ continent.name, ncol = 2, scale = "free_y")
+```
+
+When we summarize by continent, the relationship between TPR and IR is not well appreciated, this is because not all countries carry out enough tests and some do not report this statistic frequently.
+
+
+# Insights Gained
+
+## CFR outline
+
+The current global fatality rate for the pandemic is 2%, that is to say, there are 2 deceased persons for every 100 infected.
+
+```{r Current_CFR}
+CFR.mean = mean(filter(covid19,date == last(date))$CFR)
+CFR.mean
+```
+
+```{r CFR_global_progress1, warning = FALSE, fig.align = 'center' }
+# Global progress of CFR from the pandemic.
+covid19 %>% 
+  group_by(date) %>%
+  summarise(CFR = (sum(D.cum) / sum(I.cum))*100) %>%
+  ggplot() +
+  geom_area(aes(x = date, y = CFR), size = 1, colour = "red3", 
+            fill = "red", alpha = 0.5) +
+  scale_y_continuous(labels = label_number_si()) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  labs(title = "CFR Values", x = "Months", y = "CFR") +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        title = element_text(size = 12, color = "red4", face = "bold"))
+```
+
+Some countries report a CFR several points above the global average, among these we have: Yemen, Mexico, Bulgaria and Sudan.
+
+```{r CFR_outline1, warning = FALSE, fig.align = 'center'}
+# Countries with CFRs above average
+filter(covid19, date == last(date) &
+         country.alphacode %in% c("SDN","EGY","TCD","MEX","ECU","BOL",
+                                  "YEM","SYR","CHN","BGR","BIH","ITA")) %>% 
+  ggplot() +
+  geom_col(aes(x = CFR, y = country.name), size = 1, colour = "red3", 
+           fill = "red", alpha = 0.2) +
+  geom_vline(xintercept = CFR.mean, size = 1.5, color = "red4") +
+  scale_x_continuous(labels = label_number_si(),n.breaks = 20)  +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        title = element_text(size = 12, color = "red4", face = "bold")) +
+  labs(title = "Countries with CFRs above average", x = "Countries", y = "CFR")
+```
+
+Below is the CFR of each country and its relation to the average.
+
+```{r CFR_outline2, warning = FALSE, fig.align = 'center'}
+# Relationship of the CFR with respect to the average of each Country
+filter(covid19,date == last(date)) %>% 
+  ggplot(aes(x = CFR, y = reorder(country.alphacode, CFR), 
+             fill = CFR < CFR.mean)) +
+  geom_col() +
+  geom_vline(xintercept = CFR.mean)  +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black", hjust = 1),
+        axis.text.y = element_text(size = 6, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        legend.position = "none",
+        title = element_text(size = 12, color = "yellow3", face = "bold")) +
+  labs(title = "CFR Values", x = "CFR", y = "Countries") +
+  facet_wrap(~ continent.name, nrow = 1, scale = "free_y")
+```
+
+
+## Calculation of the effective Reporductive Number (Re)
+
+A value that measures the propagation speed of the pandemic is the effective reproductive number or Re. Next we will calculate the Re of each country throughout the pandemic.
+
+To calculate the Re we use the estimate_R function with the following values for the serial interval (taken from an epidemiological study on Covid19 in Colombia, published in May 2020):
+
+`mean_si` = 1.96
+`std_si` = 0.51
+
+```{r Re1, warning = FALSE}
+date_i <- last(covid19$date)
+
+covid19.example <-  
+  filter(covid19, between(date, date_i-7, date_i)) %>%
+  group_by(date) %>%
+  summarise(I = sum(I.cum)) %>%
+  mutate(dates = date, I = ifelse(I < 0, 0, I)) 
+
+Re <- estimate_R(incid = covid19.example, method = "parametric_si",
+                 config = make_config(list(mean_si = 1.96, std_si = 0.51)))
+
+Re$R$`Mean(R)`
+```
+
+```{r Re2, include=FALSE}
+rm(covid19.example, date_i, Re)
+```
+
+In this way we obtain that the global Re for the last week is `round(Re$R$`Mean(R)`,2)`.
+
+Now we calculate the Re for all countries and all dates. Let's start by building the function `covid19.calculate.Re`, to calculate the Re of a country for a date.
+
+```{r Re3, warning = FALSE}
+# Calculate Re for one country and one date
+covid19.calculate.Re <- function(data, c.alphacode, date_i) {
+  dat <- filter(data, country.alphacode == c.alphacode & 
+                  between(date, date_i - 7, date_i)) %>%
+    select(date, I.cum) %>%
+    mutate(dates = date, I = ifelse(I.cum < 0, 0, I.cum))
+  
+  options(warn = -1)
+  Re <- suppressMessages(estimate_R(incid = dat, method = "parametric_si",
+                                    config = make_config(list(mean_si = 1.96, std_si = 0.51))))
+  options(warn = 0)
+  
+  Re$R$`Mean(R)`
+} 
+```
+
+Let's test the function for the United States and on December 18:
+
+```{r Re4, warning = FALSE}
+date_i <- as.Date("2020-12-18")
+c.alphacode <- "USA"
+Re <- covid19.calculate.Re(covid19, c.alphacode, date_i)
+
+covid19.Re <- data.frame(country.alphacode = c.alphacode,
+                         date = as.Date(date_i), Re = Re)
+covid19.Re
+```
+
+```{r Re5, include=FALSE}
+rm(Re, date_i, c.alphacode, covid19.Re)
+```
+
+The `covid19.calculate.Re.country` function calculates the Re for all countries for a date.
+
+```{r Re6, warning = FALSE}
+# Calculate Re for All countries and one date
+covid19.calculate.Re.country <- function(data, d) {
+  Re <- sapply(data$country.alphacode[which(data$date == d)],
+               function(i) covid19.calculate.Re(data, i, d) )
+  
+  Re <- as.data.frame(Re)
+  df <- data.frame(country.alphacode = rownames(Re),
+                   date = d, Re = Re)
+  rownames(df) <- NULL
+  df
+}
+```
+
+Now let's calculate the Re of all the countries for December 18:
+
+```{r Re7, warning = FALSE}
+covid19.Re <- covid19.calculate.Re.country(covid19, as.Date("2020-12-18"))
+
+tail(covid19.Re, 20) %>%
+  knitr::kable(caption = "Re") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+Finally, to calculate the Re of all the countries and for all the dates that we have registered for the pandemic we use the function `covid19.calculate.Re.all`.
+
+```{r Re8, warning = FALSE}
+# Calculate Re for all countries and all dates
+covid19.calculate.Re.all <- function(data) {
+  data.Re <- data.frame(country.alphacode = NULL, date = NULL, Re = NULL)
+  dates <- seq(first(data$date)+7, last(data$date), 1)
+  nds <- length(dates)
+  message("Dates range: [", first(dates), " - ", last(dates), "] ", nds, " days")
+  for (d in dates) {
+    date_i <- as.Date(d, origin = "1970-01-01")
+    ds <- date_i - first(dates) + 1
+    message('\r', date_i, " - ", ds, "/", nds, " (",
+            round(ds*100/nds, 1), "%)    ", appendLF = FALSE)
+    
+    Re <- covid19.calculate.Re.country(data, date_i)
+    data.Re <- rbind(data.Re, Re)
+  }
+  data.Re
+}
+```
+
+This calculation will take much longer to complete.
+
+```{r Re9, warning = FALSE, message = FALSE}
+covid19.Re <- covid19.calculate.Re.all(covid19)
+```
+
+```{r Re10, warning = FALSE}
+tail(covid19.Re, 20) %>%
+  knitr::kable(caption = "Re") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+
+### Add Re to covid19
+
+```{r Re11, warning = FALSE}
+covid19 <- covid19 %>% left_join(covid19.Re)
+```
+
+When graphing the Re throughout the pandemic we can see that as of April, the average Re is around 1.50.
+
+```{r Re12, warning = FALSE, fig.align = 'center'}
+# Plot Re
+covid19 %>%
+  group_by(date) %>%
+  summarise(Re = mean(Re, na.rm = TRUE)) %>%
+  ggplot(aes(x = date, y = Re)) +
+  geom_line(color = "yellow3", size = 1) +
+  geom_area(fill = "yellow3", alpha = 0.5) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        title = element_text(size = 12, color = "yellow4", face = "bold")) +
+  labs(title = "Average Re Progression", x = "Months", y = "Average Re")
+```
+
+If we consider the entire planet as a single nation and calculate the global Re, we obtain a value around 1.20.
+
+```{r Re13, warning = FALSE, message = FALSE}
+covid19.example <- group_by(covid19, date) %>%
+  summarise(I.cum = sum(I.cum)) %>%
+  mutate(country.alphacode = "GLB", dates = date, I.cum = ifelse(I.cum < 0, 0, I.cum))
+
+covid19.Re <- covid19.calculate.Re.all(covid19.example)
+mean(covid19.Re$Re)
+```
+
+```{r Re14, warning = FALSE, fig.align = 'center'}
+# Plot Global Re
+covid19.Re %>%
+  ggplot(aes(x = date, y = Re)) +
+  geom_line(color = "yellow3", size = 1) +
+  geom_area(fill = "yellow3", alpha = 0.5) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        title = element_text(size = 12, color = "yellow4", face = "bold")) +
+  labs(title = "Global Re Progression", x = "Months", y = "Global Re")
+```
+
+```{r Re15, include=FALSE}
+rm(covid19.Re)
+```
+
+
+## Correlations
+
+Let's explore which variables have the most correlation in our covid19 data.
+
+```{r Correlations1, warning = FALSE}
+sum(is.na(covid19$TPR))
+mean(covid19$TPR, na.rm = T)
+```
+
+We will make some adjustments to our variables and use the `cor` function with all of our variables.
+
+```{r Correlations2, warning = FALSE}
+covid19 <- mutate(covid19, 
+                  season.num = case_when(season == "winter" ~ 1,
+                                         season == "spring" ~ 2,
+                                         season == "summer" ~ 3,
+                                         season == "fall" ~ 4),
+                  Re = ifelse(is.na(Re), mean(covid19$Re, na.rm = T), Re))
+
+correlations <- round(cor(select(na.omit(covid19), 
+                                 D.cum, I.cum, D, I, measure.level, IR, CFR, 
+                                 Re, TPR, latitude, season.num)),2)
+
+correlations  %>%
+  knitr::kable(caption = "Correlations") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+Using corrplot.mixed we will show the correlations of all the variables. 
+
+```{r Correlations3, warning = FALSE, fig.align = 'center'}
+corrplot.mixed(correlations, 
+               upper = "color", 
+               order = "FPC", 
+               lower.col = "black", 
+               number.cex = 0.7, 
+               tl.cex = 0.5)
+```
+
+The greater the intensity of the blue color, the greater the positive correlation, meaning that both variables increase or decrease at the same time and the greater the intensity of the red color, the greater the negative correlation, that is, while one variable grows the other decreases . The white color represents that there is no correlation between the variables.
+
+As expected, the number of infected people has a strong correlation with the number of deaths. Also, although with less correlation, the measurements, the season of the year and even the latitude have an influence on the number of deaths.
+
+
+## Deaths Acumulated Correlations
+
+```{r Correlations4, warning = FALSE}
+sort(correlations[1, -1], decreasing = T) %>%
+  knitr::kable(caption = "Deaths Acumulated Correlations") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+
+# Modeling Approaches 
+
+## Smoothing
+
+### Negative Infected Values
+
+When the data presents "noise" or out-of-trend values, we use data smoothing to reduce the effect of these noisy values in our analysis. In particular, we observe negative values in the indicators of infected and deceased people.
+
+```{r Smoothing1, warning = FALSE}
+filter(covid19, I < 0) %>% 
+  arrange(I) %>% 
+  select(country.name, date, I) %>% 
+  head(20) %>%
+  knitr::kable(caption = "Negative Infected Values") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+In the following graphs of Spain, Ecuador, Luxembourg and France we can see, with black color, the negative values (corrections) of the number of daily infected.
+
+```{r Smoothing2, warning = FALSE, fig.align = 'center'}
+filter(covid19, country.alphacode %in% c("ESP","ECU","LUX","FRA")) %>%
+  ggplot(aes(x = date, y = I, color = ifelse(I < 0, 0, 1))) +
+  geom_point(size = 1) +
+  geom_line(size = 0.5, alpha = 0.5) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  scale_y_continuous(labels = label_number_si(), n.breaks = 10) +
+  scale_color_gradient(low = "black", high = "yellow2") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"),
+        legend.position = "none") +
+  labs(title = "Negatives Infected", color = "", x = "Date", y = "Infected") +
+  facet_wrap(. ~ country.name, scale = "free_y")
+```
+
+
+### Negative Deaths Values
+
+Also in the deceased there are negative values:
+
+```{r Smoothing3, warning = FALSE}
+filter(covid19, D < 0) %>% 
+  arrange(D) %>% 
+  select(country.name, date, D) %>% 
+  head(20) %>%
+  knitr::kable(caption = "Negative Deaths Values") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+```{r Smoothing4, warning = FALSE, fig.align = 'center'}
+filter(covid19, country.alphacode %in% c("ESP","KGZ","FRA","BEL")) %>%
+  ggplot(aes(x = date, y = D, color = ifelse(D < 0, 0, 1))) +
+  geom_point(size = 1) +
+  geom_line(size = 0.5, alpha = 0.5) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  scale_y_continuous(labels = label_number_si(), n.breaks = 10) +
+  scale_color_gradient(low = "black", high = "red2") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"),
+        legend.position = "none") +
+  labs(title = "Negatives Deaths", color = "", x = "Date", y = "Deaths") +
+  facet_wrap(. ~ country.name, scale = "free_y")
+```
+
+
+### Smoothing date using `rollmean` function
+
+Using the rollmean function we can smooth the data by applying a 7-day moving average.
+
+```{r Smoothing5, warning = FALSE}
+library(zoo)
+
+covid19 %>%
+  group_by(date) %>%
+  summarise(D = sum(D)) %>%
+  mutate(D.mm = rollmean(D, 7, fill = list(0, 0, 0))) %>%
+  head() %>%
+  knitr::kable(caption = "Smoothing date using rollmean function") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+
+```
+
+```{r Smoothing6, warning = FALSE, fig.align = 'center'}
+# Smoothing daily Deaths Group by date (rollmean)
+covid19 %>%
+  group_by(date) %>%
+  summarise(D = sum(D)) %>%
+  mutate(D.mm = rollmean(D, 7, fill = list(0, 0, 0), align = "right")) %>%
+  gather("Type", "Value", -date) %>%
+  ggplot(aes(x = date, y = Value, color = Type)) +
+  geom_line(size = 1, alpha = 0.5) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  scale_y_continuous(n.breaks = 10) +
+  scale_color_manual(values = c("red","black"),
+                     labels = c("Daily Deaths","Moving Average Daily Deaths")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"), 
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.position = "bottom") +
+  labs(title = "Smoothing Daily Deaths Group by date (rollmean)", color = "",
+       x = "date", y = "D")
+```
+
+
+### Smoothing date using `geom_smooth` function
+
+```{r Smoothing7, warning = FALSE, fig.align = 'center'}
+# Smoothing daily Deaths Group by date (geom_smooth)
+covid19 %>%
+  group_by(date) %>%
+  summarise(D = sum(D)) %>%
+  ggplot(aes(x = date, y = D)) +
+  geom_line(size = 1, alpha = 0.5, color = "red") +
+  geom_smooth(method = 'loess', formula = 'y ~ x', span = 0.2, 
+              color = "blue", alpha = 0.5) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  scale_y_continuous(n.breaks = 10) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"), 
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8)) +
+  labs(title = "Smoothing Daily Deaths Group by date (geom_smooth)",
+       x = "date", y = "D")
+```
+
+
+### Smoothing date by Week
+
+Summarizing the values by week also produces a smoothed result.
+
+Pointing out the weeks in the covid19 data:
+
+```{r Smoothing8, warning = FALSE}
+covid19 %>%
+  mutate(W = (year(date)-year(first(date)))*52 + week(date)) %>%
+  select(country.name, date, W) %>%
+  head() %>%
+  knitr::kable(caption = "Weeks in covid19 data") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+We can compare the smoothing by moving average and by week.
+
+```{r Smoothing9, warning = FALSE, fig.align = 'center'}
+# Smoothing daily Deaths Group by week (rollmean)
+covid19 %>%
+  mutate(W = (year(date)-year(first(date)))*52 + week(date)) %>%
+  group_by(W) %>%
+  summarise(D = sum(D)) %>%
+  mutate(D.mm = rollmean(D, 7, fill = list(0, 0, 0), align = "right")) %>%
+  gather("Type", "Value", -W) %>%
+  ggplot(aes(x = W, y = Value, color = Type)) +
+  geom_line(size = 1, alpha = 0.5) +
+  scale_y_continuous(n.breaks = 10) +
+  scale_color_manual(values = c("red","black"),
+                     labels = c("Deaths Weekly","Moving Average Deaths")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"), 
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8),
+        legend.position = "bottom") +
+  labs(title = "Smoothing Weekly Deaths Group by week (rollmean)", color = "",
+       x = "Weeks", y = "D")
+```
+
+```{r Smoothing10, warning = FALSE, fig.align = 'center'}
+# Smoothing daily Deaths Group by week (geom_smooth)
+covid19 %>%
+  mutate(W = (year(date)-year(first(date)))*52 + week(date)) %>%
+  group_by(W) %>%
+  summarise(D = sum(D)) %>%
+  ggplot(aes(x = W, y = D)) +
+  geom_line(size = 1, alpha = 0.5, color = "red") +
+  geom_smooth(method = 'loess', formula = 'y ~ x', span = 0.2, 
+              color = "blue", alpha = 0.5) +
+  scale_y_continuous(n.breaks = 10) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"), 
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8)) +
+  labs(title = "Smoothing Daily Deaths Group by week (geom_smooth)",
+       x = "Week", y = "D")
+```
+
+
+### Smoothing covid19 data: covid19.s
+
+We build a set of smoothed data per week and call it `covid19.s`
+
+```{r Smoothing11, warning = FALSE, fig.align = 'center'}
+covid19.s <- covid19 %>%
+  mutate(Y = year(date), W = (year(date)-year(first(date)))*52 + week(date)) %>%
+  group_by(country.alphacode, W) %>%
+  summarise(I = sum(I), D = sum(D), R = sum(R), N = max(N), 
+            TPR = mean(TPR, na.rm = TRUE), 
+            measure.level = max(measure.level),
+            season = last(season),
+            Re = mean(Re, na.rm = TRUE)) %>%
+  group_by(country.alphacode) %>%
+  mutate(I.cum = cumsum(I), D.cum = cumsum(D), R.cum = cumsum(R),
+         S = N - I.cum - R.cum,
+         IR = (I.cum / N) * 10^5,
+         CFR = ifelse(I.cum == 0, 0, D.cum / I.cum)*100, 
+         M = (D.cum / N)*10^5,
+         season.num = case_when(season == "winter" ~ 1,
+                                season == "spring" ~ 2,
+                                season == "summer" ~ 3,
+                                season == "fall" ~ 4)) %>%
+  left_join(distinct(covid19, country.name, country.isocode, country.alphacode, 
+                     latitude, longitude, continent.name, region.name)) %>%
+  ungroup()
+```
+
+When comparing the curves of the daily data with the weekly ones, we observe that some values out of range disappear but there are still some negative values in the weekly data.
+
+```{r Smoothing12, warning = FALSE, fig.align = 'center'}
+# Smoothing Infected comparisson
+grid.arrange(
+  filter(covid19, country.alphacode %in% c("ESP","ECU","LUX","FRA")) %>%
+    ggplot(aes(x = date, y = I, color = ifelse(I < 0, 0, 1))) +
+    geom_point(size = 1) +
+    geom_line(size = 0.5, alpha = 0.5) +
+    scale_x_date(date_breaks = "3 month", date_labels = "%b") +
+    scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+    scale_color_gradient(low = "black", high = "yellow2") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"),
+          legend.position = "none") +
+    labs(title = "Infected by date", color = "", x = "Date", y = "Infected") +
+    facet_wrap(. ~ country.name, ncol = 4, scale = "free_y")
+  ,
+  filter(covid19.s, country.alphacode %in% c("ESP","ECU","LUX","FRA")) %>%
+    ggplot(aes(x = W, y = I, color = ifelse(I < 0, 0, 1))) +
+    geom_point(size = 1) +
+    geom_line(size = 0.5, alpha = 0.5) +
+    scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+    scale_color_gradient(low = "black", high = "yellow2") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"),
+          legend.position = "none") +
+    labs(title = "Infected by Weeks", color = "", x = "Week", y = "Infected") +
+    facet_wrap(. ~ country.name, ncol = 4, scale = "free_y")
+)
+```
+
+
+### Smoothing covid19 data using Media Movil: covid19.s.mm
+
+Now we build the smoothed data weekly with 3 week moving average and call it `covid19.s.mm`.
+
+```{r Smoothing13, warning = FALSE}
+covid19.s.mm <- covid19.s %>%
+  group_by(country.alphacode) %>%
+  mutate(I = rollmean(I, 3, fill = list(0, 0, 0), align = "right"), 
+         D = rollmean(D, 3, fill = list(0, 0, 0), align = "right"), 
+         R = rollmean(R, 3, fill = list(0, 0, 0), align = "right"),
+         TPR = rollmean(TPR, 3, fill = list(0, 0, 0), na.rm = TRUE, align = "right"),
+         Re = rollmean(Re, 3, fill = list(0, 0, 0), align = "right"), 
+         I.cum = cumsum(I), 
+         D.cum = cumsum(D), 
+         R.cum = cumsum(R),
+         S = N - I.cum - R.cum,
+         IR = (I.cum / N) * 10^5,
+         CFR = ifelse(I.cum == 0, 0, D.cum / I.cum)*100, 
+         M = (D.cum / N)*10^5) %>%
+  ungroup()
+```
+
+```{r Smoothing14, warning = FALSE, fig.align = 'center'}
+# Smoothing Infected comparisson
+grid.arrange(ncol = 1,
+             filter(covid19, country.alphacode %in% c("ESP","ECU","LUX","FRA")) %>%
+               ggplot(aes(x = date, y = I, color = ifelse(I < 0, 0, 1))) +
+               geom_point(size = 1) +
+               geom_line(size = 0.5, alpha = 0.5) +
+               scale_x_date(date_breaks = "3 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+               scale_color_gradient(low = "black", high = "yellow2") +
+               theme_minimal() +
+               theme(axis.text.x = element_text(size = 8, color = "black"),
+                                          axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title = element_text(size = 10, color = "black", face = "bold"),
+                     legend.position = "none") +
+               labs(title = "Infected by date", color = "", x = "Date", y = "Infected") +
+               facet_wrap(. ~ country.name, ncol = 4, scale = "free_y")
+             ,
+             filter(covid19.s, country.alphacode %in% c("ESP","ECU","LUX","FRA")) %>%
+               ggplot(aes(x = W, y = I, color = ifelse(I < 0, 0, 1))) +
+               geom_point(size = 1) +
+               geom_line(size = 0.5, alpha = 0.5) +
+               scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+               scale_color_gradient(low = "black", high = "yellow2") +
+               theme_minimal() +
+               theme(axis.text.x = element_text(size = 8, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title = element_text(size = 10, color = "black", face = "bold"),
+                     legend.position = "none") +
+               labs(title = "Infected by Weeks", color = "", x = "Week", y = "Infected") +
+               facet_wrap(. ~ country.name, ncol = 4, scale = "free_y")
+             ,
+             filter(covid19.s.mm, country.alphacode %in% c("ESP","ECU","LUX","FRA")) %>%
+               group_by(country.alphacode) %>%
+               mutate(I = rollmean(I, 7, fill = list(NA, NULL, NA))) %>%
+               ungroup() %>%
+               ggplot(aes(x = W, y = I)) +
+               geom_point(color = "yellow2", size = 1) +
+               geom_line(color = "yellow2", size = 0.5, alpha = 0.5) +
+               scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+               theme_minimal() +
+               theme(axis.text.x = element_text(size = 8, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title = element_text(size = 10, color = "black", face = "bold"),
+                     legend.position = "none") +
+               labs(title = "Media Movil Infected by Weeks", color = "", x = "Week", y = "Infected") +
+               facet_wrap(. ~ country.name, ncol = 4, scale = "free_y")
+)
+```
+
+Compare the three curves of the three data sets: `covid19`, `covid19.s`, and `covid19.s.mm`. We observe that the curve of covid19.s.mm is smoother.
+
+```{r Smoothing15, warning = FALSE, fig.align = 'center'}
+# Smoothing Indicators comparisson
+grid.arrange(nrow = 1,
+             filter(covid19, country.alphacode == "ESP") %>%
+               select(date, I, D, IR, CFR, TPR) %>%
+               gather("Types", "Values", -date) %>%
+               ggplot(aes(x = date, y = Values, color = Types)) +
+               geom_line(size = 1) +
+               scale_x_date(date_breaks = "3 month", date_labels = "%b") +
+               scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+               scale_color_manual(values = c("red2","red2","yellow2","yellow2","green2")) +
+               theme_minimal() +
+               theme(axis.text.x = element_text(size = 8, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title = element_text(size = 10, color = "black", face = "bold"),
+                     strip.text = element_blank(),
+                     legend.position = "none") +
+               labs(title = "covid19", x = "Date", y = "") +
+               facet_wrap(. ~ Types, ncol = 1, scale = "free_y")
+             ,
+             filter(covid19.s, country.alphacode == "ESP") %>%
+               select(W, I, D, IR, CFR, TPR) %>%
+               gather("Types", "Values", -W) %>%
+               ggplot(aes(x = W, y = Values, color = Types)) +
+               geom_line(size = 1) +
+               scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+               scale_color_manual(values = c("red2","red2","yellow2","yellow2","green2")) +
+               theme_minimal() +
+               theme(axis.text.x = element_text(size = 8, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title = element_text(size = 10, color = "black", face = "bold"), 
+                     strip.text = element_blank(),
+                     legend.position = "none") +
+               labs(title = "covid19.s", x = "Weeks", y = "") +
+               facet_wrap(. ~ Types, ncol = 1, scale = "free_y")
+             ,
+             filter(covid19.s.mm, country.alphacode == "ESP") %>%
+               select(W, I, D, IR, CFR, TPR) %>%
+               gather("Types", "Values", -W) %>%
+               ggplot(aes(x = W, y = Values, color = Types)) +
+               geom_line(size = 1) +
+               scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+               scale_color_manual(values = c("red2","red2","yellow2","yellow2","green2")) +
+               theme_minimal() +
+               theme(axis.text.x = element_text(size = 8, color = "black"),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title = element_text(size = 10, color = "black", face = "bold"), 
+                     strip.text = element_text(size = 10, color = "black", face = "bold"),
+                     legend.position = "none") +
+               labs(title = "covid19.s.mm", x = "Weeks", y = "") +
+               facet_wrap(. ~ Types, ncol = 1, scale = "free_y",
+                          strip.position = "right",
+                          labeller = as_labeller(c('I' = "Infected",'D' = "Deaths",
+                                                   'IR' = "IR", 'CFR' = "CFR",'TPR'="TPR")))
+)
+```
+
+
+### Epidemiological Weeks (EW) 
+
+To carry out epidemiological surveillance actions, it is necessary to group the data around a certain period of time. This period is generally one week and is known as the epidemiological week (EW).
+
+The importance of epidemiological weeks lies in that it allows the comparison of epidemiological events in a given year or period within a year, with those of previous years. It also facilitates comparisons between countries, since it is an epidemiological methodology officially adopted at the international level.
+
+```{r EW1, warning = FALSE}
+covid19 <- covid19 %>%
+  left_join(
+    filter(covid19, I.cum > 0) %>%
+      group_by(country.alphacode) %>%
+      summarise(date = date,
+                EW = (year(date)-year(first(date)))*52 + week(date) - week(first(date)) + 1)) %>%
+  mutate(EW = ifelse(is.na(EW),0,EW))
+```
+
+For our analysis, the first EW corresponds to the first week of the recorded data. In this way, week 5 of the year corresponds to the first EW for countries that began to register infected such as China.
+
+```{r EW2, warning = FALSE, fig.align = 'center'}
+# First EW by Country
+filter(covid19, EW == 1) %>%
+  group_by(country.alphacode) %>%
+  summarise(date = min(date), n = n()) %>%
+  arrange(date) %>% head(25) %>%
+  ggplot(aes(x = reorder(country.alphacode, date), y = date)) +
+  geom_point() +
+  scale_y_date(date_breaks = "1 day", date_labels = "%d %b") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold")) +
+  labs(title = "First EW by Country", x = "Countries")
+```
+
+March is the month when the largest number of countries started the pandemic.
+
+```{r EW3, warning = FALSE, fig.align = 'center'}
+# Number of countries in the first EW
+filter(covid19, EW == 1) %>%
+  mutate(date = floor_date(date, unit = "month")) %>%
+  group_by(country.alphacode) %>%
+  summarise(date = min(date)) %>%
+  group_by(date) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(x = date, y = n, fill = -n)) +
+  geom_col() +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  scale_y_continuous(n.breaks = 10) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"),
+        legend.position = "none") +
+  labs(title = "Number of countries in the first EW", 
+       x = "Months", y = "Number of countries")
+```
+
+In the following graphs we can observe the difference of some indicators expressed in weeks and in epidemiological weeks:
+
+```{r EW4, warning = FALSE, fig.align = 'center'}
+# IR progression in Weeks vs. EW
+grid.arrange(
+  covid19 %>%
+    mutate(W = (year(date)-year(first(date)))*52 + week(date)) %>%
+    group_by(W) %>%
+    summarise(IR = mean(IR)) %>%
+    ggplot(aes(x = W, y = IR)) +
+    geom_col(fill = "yellow2", alpha = 0.8) +
+    scale_x_continuous(n.breaks = 10) +
+    scale_y_continuous(n.breaks = 10) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8)) +
+    labs(title = "IR by Weeks", x = "Weeks", y = "IR")
+  ,
+  covid19 %>%
+    group_by(EW) %>%
+    summarise(IR = mean(IR)) %>%
+    ggplot(aes(x = EW, y = IR)) +
+    geom_col(fill = "yellow2", alpha = 0.8) +
+    scale_x_continuous(n.breaks = 10) +
+    scale_y_continuous(n.breaks = 10) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8)) +
+    labs(title = "IR by Epidemiological Weeks (EW)", x = "EW", y = "IR")
+)
+```
+
+```{r EW5, warning = FALSE, fig.align = 'center'}
+# CFR progression in Weeks vs. EW
+grid.arrange(
+  covid19 %>%
+    mutate(W = (year(date)-year(first(date)))*52 + week(date)) %>%
+    group_by(W) %>%
+    summarise(CFR = mean(CFR)) %>%
+    ggplot(aes(x = W, y = CFR)) +
+    geom_col(fill = "red", alpha = 0.5) +
+    scale_x_continuous(n.breaks = 10) +
+    scale_y_continuous(n.breaks = 10) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8)) +
+    labs(title = "CFR by Weeks", x = "Weeks", y = "CFR")
+  ,
+  covid19 %>%
+    group_by(EW) %>%
+    summarise(CFR = mean(CFR)) %>%
+    ggplot(aes(x = EW, y = CFR)) +
+    geom_col(fill = "red", alpha = 0.5) +
+    scale_x_continuous(n.breaks = 10) +
+    scale_y_continuous(n.breaks = 10) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8)) +
+    labs(title = "CFR by Epidemiological Weeks (EW)", x = "EW", y = "CFR")
+)
+```
+
+```{r EW6, warning = FALSE, fig.align = 'center'}
+# TPR progression in Weeks vs. EW
+grid.arrange(
+  covid19 %>%
+    mutate(W = (year(date)-year(first(date)))*52 + week(date)) %>%
+    group_by(W) %>%
+    summarise(TPR = mean(TPR, na.rm = TRUE)) %>%
+    ggplot(aes(x = W, y = TPR)) +
+    geom_col(fill = "green", alpha = 0.5) +
+    scale_x_continuous(n.breaks = 10) +
+    scale_y_continuous(n.breaks = 10) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8)) +
+    labs(title = "TPR by Weeks", x = "Weeks", y = "TPR")
+  ,
+  covid19 %>%
+    group_by(EW) %>%
+    summarise(TPR = mean(TPR, na.rm = TRUE)) %>%
+    ggplot(aes(x = EW, y = TPR)) +
+    geom_col(fill = "green", alpha = 0.5) +
+    scale_x_continuous(n.breaks = 10) +
+    scale_y_continuous(n.breaks = 10) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8)) +
+    labs(title = "TPR by Epidemiological Weeks (EW)", x = "EW", y = "CFR")
+)
+```
+
+
+### Smoothing EW
+
+Let's add the EW column to our smoothed data: `covid19.s` and `covid19.s.mm`:
+
+```{r Smoothing_EW1, warning = FALSE}
+covid19.s <- covid19.s %>%
+  left_join(
+    filter(covid19.s, I.cum > 0) %>%
+      group_by(country.alphacode) %>%
+      summarise(W = W,
+                EW = W - first(W) + 1)) %>%
+  mutate(EW = ifelse(is.na(EW),0,EW))
+```
+
+```{r Smoothing_EW2, warning = FALSE}
+covid19.s.mm <- covid19.s.mm %>%
+  left_join(
+    filter(covid19.s.mm, I.cum > 0) %>%
+      group_by(country.alphacode) %>%
+      summarise(W = W,
+                EW = W - first(W) + 1)) %>%
+  mutate(EW = ifelse(is.na(EW),0,EW))
+```
+
+Let's compare the smoothed data in weeks and in EW:
+
+```{r Smoothing_EW3, warning = FALSE, fig.align = 'center'}
+# Smoothing Infected in Weeks vs. EW
+grid.arrange(
+  covid19.s %>%
+    group_by(W) %>%
+    summarise(I = sum(I)) %>%
+    ggplot(aes(x = W, y = I)) +
+    geom_col(fill = "yellow2", alpha = 0.8) +
+    scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8)) +
+    labs(title = "Smoothing Infected by Weeks", x = "Weeks", y = "Infected")
+  ,
+  covid19.s %>%
+    group_by(EW) %>%
+    summarise(I = sum(I)) %>%
+    ggplot(aes(x = EW, y = I)) +
+    geom_col(fill = "yellow2", alpha = 0.8) +
+    scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8)) +
+    labs(title = "Smoothing Infected by EW", x = "EW", y = "Infected")
+  ,
+  covid19.s.mm %>%
+    group_by(EW) %>%
+    summarise(I = sum(I)) %>%
+    ggplot(aes(x = EW, y = I)) +
+    geom_col(fill = "yellow2", alpha = 0.8) +
+    scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8)) +
+    labs(title = "Smoothing Media Movil Infected by EW", x = "EW", y = "Infected")
+)
+```
+
+```{r Smoothing_EW4, warning = FALSE, fig.align = 'center'}
+# Smoothing Fatality in Weeks vs. EW
+grid.arrange(
+  covid19.s %>%
+    group_by(W) %>%
+    summarise(CFR = mean(CFR)) %>%
+    ggplot(aes(x = W, y = CFR)) +
+    geom_line(color = "red2", size = 1) +
+    scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8)) +
+    labs(title = "Smoothing Fatality by Weeks", x = "Weeks", y = "Infected")
+  ,
+  covid19.s %>%
+    group_by(EW) %>%
+    summarise(CFR = mean(CFR)) %>%
+    ggplot(aes(x = EW, y = CFR)) +
+    geom_line(color = "red2", size = 1) +
+    scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8)) +
+    labs(title = "Smoothing Fatality by EW", x = "EW", y = "Infected")
+  ,
+  covid19.s.mm %>%
+    group_by(EW) %>%
+    summarise(CFR = mean(CFR)) %>%
+    ggplot(aes(x = EW, y = CFR)) +
+    geom_line(color = "red2", size = 1) +
+    scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 8, color = "black"),
+          axis.text.y = element_text(size = 8, color = "black"),
+          axis.title = element_text(size = 10, color = "black", face = "bold"), 
+          legend.text = element_text(size = 8),
+          legend.title = element_text(size = 8)) +
+    labs(title = "Smoothing Media Movil Fatality by EW", x = "EW", y = "Infected")
+)
+```
+
+```{r Smoothing_EW5, warning = FALSE, fig.align = 'center'}
+# Smoothing Indicators
+grid.arrange(ncol = 1, 
+             # Smoothing Group by Date
+             covid19 %>%
+               group_by(EW) %>%
+               summarise(I = sum(I),
+                         D = sum(D),
+                         I.cum = sum(I.cum),
+                         D.cum = sum(D.cum),
+                         IR = (I.cum / N.total)*10^5,
+                         CFR = (D.cum / I.cum)*100) %>%
+               gather("Types", "Values", -EW) %>%
+               ggplot(aes(x = EW, y = Values, fill = Types)) +
+               geom_area(size = 1, alpha = 0.5) +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_fill_manual(values = c("red4","red3","red2",
+                                            "yellow3","yellow2","yellow4")) +
+               theme_minimal() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 6, color = "black"),
+                     strip.text = element_text(size = 6, color = "black", face = "bold"),
+                     title = element_text(size = 8, color = "black", face = "bold"), 
+                     legend.title = element_blank(),
+                     legend.position = "none") +
+               labs(title = "Group by EW",
+                    x = "", y = "") +
+               facet_wrap(.~ Types, ncol = 6, scale = "free",
+                          labeller = as_labeller(c('I' = "Infected",'D' = "Deaths",
+                                                   'I.cum' = "Accumulated Infected", 
+                                                   'D.cum' = "Accumulated Deaths",
+                                                   'IR' = "IR", 'CFR' = "CFR")))
+             ,
+             covid19.s %>%
+               group_by(EW) %>%
+               summarise(I = sum(I),
+                         D = sum(D),
+                         I.cum = sum(I.cum),
+                         D.cum = sum(D.cum),
+                         IR = (I.cum / N.total)*10^5,
+                         CFR = (D.cum / I.cum)*100) %>%
+               gather("Types", "Values", -EW) %>%
+               ggplot(aes(x = EW, y = Values, fill = Types)) +
+               geom_area(size = 1, alpha = 0.5) +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_fill_manual(values = c("red4","red3","red2",
+                                            "yellow3","yellow2","yellow4")) +
+               theme_minimal() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 6, color = "black"),
+                     strip.text = element_text(size = 6, color = "black", face = "bold"),
+                     title = element_text(size = 8, color = "black", face = "bold"), 
+                     legend.title = element_blank(),
+                     legend.position = "none") +
+               labs(title = "Smoothing Group by EW",
+                    x = "", y = "") +
+               facet_wrap(.~ Types, ncol = 6, scale = "free",
+                          labeller = as_labeller(c('I' = "Infected",'D' = "Deaths",
+                                                   'I.cum' = "Accumulated Infected", 
+                                                   'D.cum' = "Accumulated Deaths",
+                                                   'IR' = "IR", 'CFR' = "CFR")))
+             ,
+             covid19.s.mm %>%
+               group_by(EW) %>%
+               summarise(I = sum(I),
+                         D = sum(D),
+                         I.cum = sum(I.cum),
+                         D.cum = sum(D.cum),
+                         IR = (I.cum / N.total)*10^5,
+                         CFR = (D.cum / I.cum)*100) %>%
+               gather("Types", "Values", -EW) %>%
+               ggplot(aes(x = EW, y = Values, fill = Types)) +
+               geom_area(size = 1, alpha = 0.5) +
+               scale_y_continuous(labels = label_number_si()) +
+               scale_fill_manual(values = c("red4","red3","red2",
+                                            "yellow3","yellow2","yellow4")) +
+               theme_minimal() +
+               theme(axis.text.x = element_text(size = 6, color = "black"),
+                     axis.text.y = element_text(size = 6, color = "black"),
+                     strip.text = element_text(size = 6, color = "black", face = "bold"),
+                     title = element_text(size = 8, color = "black", face = "bold"), 
+                     legend.title = element_blank(),
+                     legend.position = "none") +
+               labs(title = "Smoothing Media Movil Group by EW",
+                    x = "", y = "") +
+                              facet_wrap(.~ Types, ncol = 6, scale = "free",
+                          labeller = as_labeller(c('I' = "Infected",'D' = "Deaths",
+                                                   'I.cum' = "Accumulated Infected", 
+                                                   'D.cum' = "Accumulated Deaths",
+                                                   'IR' = "IR", 'CFR' = "CFR")))
+)
+```
+
+
+## Prediction of number of Infected
+
+To predict the number of infected people for the next few weeks, we will use the smoothed data per week and a mobile average: `covid19.s.mm`.
+
+We will build our predictive model considering the correlation between the reproductive number (Re) and the accumulated number of Infected (Re ~ I.cum).
+
+The amount of Infected for a period is influenced by the Infected and the Re of the previous period. Therefore, it is required to identify the Infected and Re from the previous period: `I.prev` and `Re.prev`.
+
+```{r Prediction_infected1, warning = FALSE}
+# Using Re to predict the number of infected
+covid19.s.mm %>% 
+  group_by(country.alphacode) %>%
+  mutate(I.prev = lag(I, order_by = W, default = 0),
+         Re.prev = lag(Re, order_by = W, default = 0)) %>%
+  ungroup() %>%
+  mutate(I.est = I.prev * Re.prev) %>%
+  select(country.alphacode, W, I, I.prev, Re, Re.prev, I.est)
+```
+
+```{r Prediction_infected2, warning = FALSE, fig.align = 'center'}
+filter(covid19.s.mm) %>%
+  group_by(country.alphacode) %>%
+  mutate(I.prev = lag(I, order_by = W, default = 0),
+         Re.prev = lag(Re, order_by = W, default = 0)) %>%
+  ungroup() %>%
+  mutate(I.est = I.prev * Re.prev) %>%
+  group_by(W) %>%
+  summarize(I = sum(I), I.est = sum(I.est)) %>%
+  gather("Types", "Values", -W) %>%
+  ggplot(aes(x = W, y = Values, color = Types)) +
+  geom_line(size = 1) +
+  scale_color_manual(values = c("grey","yellow3"),
+                     labels = c("Registered infected", "Infected Estimates")) +
+  scale_x_continuous(labels = label_number_si(), n.breaks = 10) +
+  scale_y_continuous(labels = label_number_si(), n.breaks = 10) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 8, color = "black"),
+        legend.position = "bottom",
+        title = element_text(size = 10, color = "black", face = "bold")) +
+  labs(x = "Week", y = "Infected")
+```
+
+
+## Prediction of number of Deaths
+
+Next, we will proceed to build a model that predicts deaths from covid19.
+
+### Infected ~ Deaths
+
+As we have already seen, the number of Infected is strongly correlated with deaths, as can be seen in the following graph:
+
+```{r Prediction_deaths1, warning = FALSE, fig.align = 'center'}
+m <- cor(covid19.s.mm$I.cum, covid19.s.mm$D.cum) * 
+  sd(covid19.s.mm$D.cum) / sd(covid19.s.mm$I.cum)
+b <- mean(covid19.s.mm$D.cum) - m * mean(covid19.s.mm$I.cum)
+
+covid19.s.mm %>%
+  ggplot(aes(x = I.cum, y = D.cum, color = country.alphacode)) +
+  geom_point(size = 1, alpha = 0.5) +
+  geom_abline(intercept = b, slope = m, size = 1) +
+  scale_x_continuous(labels = label_number_si(), n.breaks = 10) +
+  scale_y_continuous(labels = label_number_si(), n.breaks = 10) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        legend.position = "none",
+        title = element_text(size = 10, color = "black", face = "bold")) +
+  labs(x = "Infected", y = "Deaths")
+```
+
+
+### Lalitude ~ Deaths
+
+There is also a slight correlation between the location of the country, determined by latitude, and the number of deaths.
+
+```{r Prediction_deaths2, warning = FALSE, fig.align = 'center'}
+m <- cor(covid19.s.mm$latitude, covid19.s.mm$D.cum) * 
+  sd(covid19.s.mm$D.cum) / sd(covid19.s.mm$latitude)
+b <- mean(covid19.s.mm$D.cum) - m*mean(covid19.s.mm$latitude)
+
+covid19.s.mm %>%
+  group_by(latitude) %>%
+  summarise(D.cum = mean(D.cum)) %>%
+  ggplot(aes(x = latitude, y = D.cum)) +
+  geom_point(size = 1, alpha = 0.5) +
+  geom_abline(intercept = b, slope = m, size = 1) +
+  scale_x_continuous(labels = label_number_si(), n.breaks = 10) +
+  scale_y_continuous(labels = label_number_si(), n.breaks = 10) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        legend.position = "none",
+        title = element_text(size = 10, color = "black", face = "bold")) +
+  labs(x = "Latitudes", y = "Deaths")
+```
+
+
+### Measure ~ Deaths
+
+The measures taken by countries to control the movement of people also influence the number of deaths.
+
+```{r Prediction_deaths3, warning = FALSE, fig.align = 'center'}
+m <- cor(covid19.s.mm$measure.level, covid19.s.mm$D.cum) * 
+  sd(covid19.s.mm$D.cum) / sd(covid19.s.mm$measure.level)
+b <- mean(covid19.s.mm$D.cum) - m*mean(covid19.s.mm$measure.level)
+
+covid19.s.mm %>%
+  group_by(measure.level) %>%
+  summarise(D.cum = mean(D.cum)) %>%
+  ggplot(aes(x = measure.level, y = D.cum)) +
+  geom_point(size = 1, alpha = 0.5) +
+  geom_abline(intercept = b, slope = m, size = 1) +
+  scale_x_continuous(labels = label_number_si(), n.breaks = 7) +
+  scale_y_continuous(labels = label_number_si(), n.breaks = 5) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        legend.position = "none",
+        title = element_text(size = 10, color = "black", face = "bold")) +
+  labs(x = "Measures", y = "Deaths")
+```
+
+```{r Prediction3}
+rm(m, b)
+```
+
+
+## Predictive Model of Deaths by Convid19
+
+Let's proceed to build an algorithm to predict the number of deaths. We will use the data from covid19 and divide it into a data set for algorithm training and another, smaller data set, for algorithm validation.
+
+
+### Train and Test Set
+
+```{r Prediction_deaths4, warning = FALSE}
+# Create Train set and test set
+create_sets <- function(data) {
+  
+  # test set will be 10% of data
+  set.seed(1, sample.kind="Rounding")
+  # if using R 3.5 or earlier, use `set.seed(1)` instead
+  test_index <- createDataPartition(y = data$country.alphacode, 
+                                    times = 1, p = 0.1, list = FALSE)
+  train_set <- data[-test_index,]
+  test_set <- data[test_index,]
+  
+  return(list(train = train_set,test = test_set))
+}  
+```
+
+```{r Prediction_deaths5, warning = FALSE}
+sets <- create_sets(covid19)
+train_set <- sets$train
+test_set <- sets$test
+rm(sets)
+```
+
+
+### Daily Infected ~ Daily Deaths
+
+We obtain the `death.model` model, we use linear regression (`lm` function) correlating the number of daily infected to predict the number of daily deaths.
+
+```{r Prediction_deaths6, warning = FALSE}
+death.model <- lm(D ~ I, data = train_set)
+```
+
+By validating our model with the test set we obtain an rmse of 70.
+
+```{r Prediction_deaths7, warning = FALSE}
+D.predict <- predict(death.model, newdata = test_set)
+```
+
+```{r Prediction_deaths8, warning = FALSE}
+RMSE <- function(true, predicted){
+  sqrt(mean((true - predicted)^2))
+}
+
+rmse <- RMSE(test_set$D, D.predict)
+rmse 
+```
+
+The average daily deaths for the last 7 days is:
+
+```{r avg_deaths1}
+deaths.avg7 <- round(sum(filter(covid19, date > last(date)-7)$D)/7,0)
+deaths.avg7
+```
+
+So the value of the percentage of the rmse is: `rmse / deaths.avg7*100`
+
+The graph below the black line represents the number of daily deaths predicted by the algorithm.
+
+```{r Prediction_deaths9, warning = FALSE, fig.align = 'center'}
+data.frame(test_set, D.predict = D.predict)  %>%
+  group_by(date) %>%
+  summarise(D = sum(D), D.predict = sum(D.predict)) %>%
+  ggplot() +
+  geom_area(aes(x = date, y = D), 
+            fill = "red", size = 1, alpha = 0.5) +
+  geom_line(aes(x = date, y = D.predict), 
+            color = "black", size = 0.5, linetype = "solid") +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  scale_y_continuous(labels = label_number_si(), n.breaks = 10) +
+  theme_bw()
+```
+
+
+### Daily Infected + latitude + measure.level + season.num ~ Daily Deaths
+
+Adding the variables: `latitude`, `measure.level` and `season.num` we improve the algorithm a bit.
+
+```{r New_Death_model1}
+death.model <- lm(D ~ I + latitude + measure.level + season.num, data = train_set)
+
+D.predict <- predict(death.model, newdata = test_set)
+
+rmse <- RMSE(test_set$D, D.predict)
+rmse 
+```
+
+Now we obtain an error percentage of: `rmse / deaths.avg7*100`
+
+
+### Daily Infected ~ Daily Deaths - Smoothing
+
+Let's see what results if we train our algorithm with the smoothed data. Let's rebuild the training and test sets but now with covid19.s.mm.
+
+```{r Prediction_deaths10, warning = FALSE}
+sets <- create_sets(covid19.s.mm)
+train_set <- sets$train
+test_set <- sets$test
+rm(sets)
+```
+
+We proceed to train the algorithm with the new data set:
+
+```{r Prediction_deaths11, warning = FALSE}
+death.model <- lm(D ~ I + latitude + measure.level + season.num, data = train_set)
+
+D.predict <- predict(death.model, newdata = test_set)
+
+rmse <- RMSE(test_set$D, D.predict)
+rmse
+```
+
+We calculate the average number of deaths in 2020.
+
+```{r avg_deaths2}
+deaths.avg7 <- round(sum(filter(covid19.s.mm)$D),0)
+deaths.avg7
+```
+
+The percentage of error is: `rmse / deaths.avg7*100`
+
+```{r Prediction_deaths12, warning = FALSE}
+data.frame(test_set, D.predict = D.predict, fig.align = 'center')  %>%
+  group_by(W) %>%
+  summarise(D = sum(D), 
+            D.predict = sum(D.predict)) %>%
+  ggplot() +
+  geom_area(aes(x = W, y = D), 
+            fill = "red", size = 1, alpha = 0.5) +
+  geom_line(aes(x = W, y = D.predict), 
+            color = "black", size = 0.5, linetype = "solid") +
+  scale_x_continuous(labels = label_number_si(), n.breaks = 10) +
+  scale_y_continuous(labels = label_number_si(), n.breaks = 10) +
+  theme_bw()
+```
+
+
+## Second Waves
+
+A concept that is very present during the pandemic is the existence of second waves of contagion, which means that there are also periods of its containment.
+
+We will use the test positivity rate (TPR) and the number of daily infected to determine whether in a given period the pandemic is in a containment phase, near the peak of contagion or during a new wave.
+
+A wave can be divided into three parts: the rise, the peak, and the descent. So we will divide the pandemic data into three periods that we will call stages. We will work with the data from covid19.s.mm, and as the time periods are expressed in weeks, we will consider for the estimation the number of weekly infections instead of daily.
+
+The duration of a stage is 6 weeks, another value used is 4 weeks. 
+
+We also need to set the maximum percentage of test positivity that indicates that there is considerable growth in the pandemic; In this sense, the medical community uses a value between 3% and 5% as a maximum TPR, here we will use 5%.
+
+In the following code `tweek` represents the time of the pandemic that we are analyzing, or the week (variable `W`) of our data; `nweek` represents the number of weeks of each stage and `pTPR` the percentage of TPR that indicates that there is a growth of infections.
+
+```{r 2nd_waves1, warning = FALSE}
+tweek <- last(covid19.s.mm$W)-1
+nweeks <- 6
+pTPR <- 5
+```
+
+```{r 2nd_waves2, warning = FALSE}
+covid19.stages <- 
+  filter(covid19.s.mm, W %in% seq(tweek-(nweeks*3 - 1), tweek, 1)) %>%
+  select(country.alphacode, W, I, TPR) %>%
+  mutate(stage = ceiling(3 + (W-tweek) / nweeks)) %>%
+  group_by(country.alphacode, stage) %>%
+  summarise(I.max = max(I), TPR.max = max(TPR, na.rm = TRUE))
+
+```
+
+```{r 2nd_waves3, warning = FALSE}
+filter(covid19.stages, country.alphacode %in% c("CHL","USA","ESP","GBR")) %>%
+    knitr::kable(caption = "Stages") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+
+```
+
+As a result, a dataframe with three rows for each country is obtained, the stage column indicates whether the data correspond to stage 1, 2 or 3, and the columns I.max and TPR.max represent the maximum numbers of Infected and the positivity rate at each stage.
+
+With these data we are going to determine 4 scenarios or phase:
+
+ **Phase** |  **Description** | **Condition** |
+---------------------| -------------------------|-------------------------------------------|
+**1. Next to Peak** | It is close to a peak or maximum value in the number of infected. | I.max_3 >= I.max_2 >= I.max_1 and TPR.max_3 >= pTPR
+ | | 
+**2. Second waves** | It is in the growth stage of a second wave. | I.max_1 > I.max_2 and I.max_3 > I.max_2 and TPR.max_3 >= pTPR
+ | | 
+**3. Pre-containment** | It is in the process of containing the number of infected, or in the lowering part of a wave. | (I.max_1 < I.max_2 and I.max_2 >= I.max_3) or (I.max_1 >= I.max_2 >= I.max_3 and TPR.max_3 >= pTPR) or (I.max_1 >= I.max_2 & I.max_2 < I.max_3 & TPR.max_3 < pTPR)
+ | | 
+**4. Containment** | It is in a stage of containing the number of infected. | (I.max_1 >= I.max_2  >= I.max_3 and TPR.max_3 < pTPR) or (I.max_1 >= I.max_2 and max(TPR.max_2, TPR.max_3) < pTPR) or (max(TPR.max_1, TPR.max_2, TPR.max_3) < pTPR)
+ | | 
+**5. Uncertain** | It is not certain which phase you are in because you have enough TPR data. | Maximum TPR of stage 3 not determined: is.infinite(TPR.max_3)
+
+The following code determines the phases of each country, applying the conditions that determine each phase:
+
+```{r 2nd_waves4, warning = FALSE}
+covid19.phases <-
+  select(covid19.stages, -TPR.max) %>%
+  spread(stage, I.max) %>%
+  rename(I.max_1 = `1`, I.max_2 = `2`, I.max_3 = `3`) %>%
+  left_join(select(covid19.stages, -I.max) %>%
+              spread(stage, TPR.max) %>%
+              rename(TPR.max_1 = `1`, TPR.max_2 = `2`, TPR.max_3 = `3`)
+  ) %>%
+  mutate(phase = case_when(
+    # Uncertain
+    is.infinite(TPR.max_3) 
+    ~ "5. Uncertain", 
+    
+    # Containment
+    (I.max_1 >= I.max_2 & I.max_2 >= I.max_3 & TPR.max_3 < pTPR) |
+      (I.max_1 >= I.max_2 & max(TPR.max_2, TPR.max_3) < pTPR) |
+      (max(TPR.max_1, TPR.max_2, TPR.max_3) < pTPR)
+    ~ "4. Containment",
+    
+    # Pre-containment
+    (I.max_1 < I.max_2 & I.max_2 >= I.max_3) |
+      (I.max_1 >= I.max_2 & I.max_2 >= I.max_3 & TPR.max_3 >= pTPR) |
+      (I.max_1 >= I.max_2 & I.max_2 < I.max_3 & TPR.max_3 < pTPR)
+    ~ "3. Pre-containment",
+    
+    # Second waves
+    I.max_1 > I.max_2 & I.max_3 > I.max_2 & TPR.max_3 >= pTPR
+    ~ "2. Second waves",
+    
+    # Next to peak
+    I.max_3 >= I.max_2 & I.max_2 >= I.max_1 & TPR.max_3 >= pTPR
+    ~ "1. Next to peak"
+  ))
+```
+
+Let's show the results on a world map:
+
+```{r 2nd_waves5, warning = FALSE}
+# Covid19 by Countries Phases
+map.world %>%
+  left_join(left_join(covid19.phases, Isocode)) %>%
+  ggplot(aes(long, lat, group = group)) + 
+  geom_polygon(aes(fill = phase), color = "steelblue2", size = 0.1) +
+  scale_fill_brewer(palette = "Spectral") +
+  theme_minimal() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(), 
+        axis.title = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.background = element_rect(colour= "black", 
+                                        fill = "lightblue", 
+                                        size = 0.5),
+        panel.grid = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 8)) +
+  ggtitle("Covid19 by Countries Phases") +
+  labs(fill = "Phase")
+```
+
+```{r 2nd_waves6, include = FALSE}
+rm(tweek, nweeks, pTPR, covid19.stages, covid19.phases)
+```
+
+Now let's build the `covid19.calculate.phases` function to provide us with the phase a country is in at a certain point in the pandemic.
+
+```{r 2nd_waves7, warning = FALSE}
+# Calculate Phases 
+covid19.calculate.phases <- function(data, 
+                                     tweek = last(data$W)-1, 
+                                     nweeks = 6, pTPR = 3) {
+  
+  covid19.stages <- filter(data, W %in% seq(tweek-(nweeks*3 - 1), tweek, 1)) %>%
+    select(country.alphacode, W, I, TPR) %>%
+    mutate(stage = ceiling(3 + (W-tweek) / nweeks)) %>%
+    group_by(country.alphacode, stage) %>%
+    summarise(I.max = max(I), TPR.max = max(TPR, na.rm = TRUE))
+  
+  select(covid19.stages, -TPR.max) %>%
+    spread(stage, I.max) %>%
+    rename(I.max_1 = `1`, I.max_2 = `2`, I.max_3 = `3`) %>%
+    left_join(select(covid19.stages, -I.max) %>%
+                spread(stage, TPR.max) %>%
+                rename(TPR.max_1 = `1`, TPR.max_2 = `2`, TPR.max_3 = `3`)
+    ) %>%
+    mutate(
+      phase = case_when(
+        # Uncertain
+        is.infinite(TPR.max_3) 
+        ~ "5. Uncertain", 
+        
+        # Containment
+        (I.max_1 >= I.max_2 & I.max_2 >= I.max_3 & TPR.max_3 < pTPR) |
+          (I.max_1 >= I.max_2 & max(TPR.max_2, TPR.max_3) < pTPR) |
+          (max(TPR.max_1, TPR.max_2, TPR.max_3) < pTPR)
+        ~ "4. Containment",
+        
+        # Pre-containment
+        (I.max_1 < I.max_2 & I.max_2 >= I.max_3) |
+          (I.max_1 >= I.max_2 & I.max_2 >= I.max_3 & TPR.max_3 >= pTPR) |
+          (I.max_1 >= I.max_2 & I.max_2 < I.max_3 & TPR.max_3 < pTPR)
+        ~ "3. Pre-containment",
+        
+        # Second waves
+        I.max_1 > I.max_2 & I.max_3 > I.max_2 & TPR.max_3 >= pTPR
+        ~ "2. Second waves",
+        
+        # Next to peak
+        I.max_3 >= I.max_2 & I.max_2 >= I.max_1 & TPR.max_3 >= pTPR
+        ~ "1. Next to peak"
+      )
+    )
+}
+```
+
+We determine the phase of each country considering that stage 3 concludes on July 31.
+
+```{r 2nd_waves8, warning = FALSE}
+# Phases in July
+covid19.phases <- covid19.calculate.phases(data = covid19.s.mm,
+                                           tweek = week("2020-07-31"))
+```
+
+At that time the United States and Spain suffered a second wave, while many countries such as India and Mexico were near a peak. On the other hand, countries like Chile and Russia were in a pre-containment stage and others like Australia and Canada were in a containment stage.
+
+```{r 2nd_waves9, warning = FALSE}
+# Covid19 by Countries Phases
+map.world %>%
+  left_join(left_join(covid19.phases, Isocode)) %>%
+  ggplot(aes(long, lat, group = group)) + 
+  geom_polygon(aes(fill = phase), color = "steelblue2", size = 0.1) +
+  scale_fill_brewer(palette = "Spectral") +
+  theme_minimal() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(), 
+        axis.title = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.background = element_rect(colour= "black", 
+                                        fill = "lightblue", 
+                                        size = 0.5),
+        panel.grid = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 8)) +
+  ggtitle("Covid19 by Countries Phases") +
+  labs(fill = "Phase")
+```
+
+Next we will show the current phases of each country using the smoothed data.
+
+```{r 2nd_waves10, warning = FALSE}
+# Current phases
+covid19.phases <- covid19.calculate.phases(covid19.s.mm)
+```
+
+```{r 2nd_waves11, warning = FALSE}
+# Covid19 by Countries Phases with function
+map.world %>%
+  left_join(left_join(covid19.phases, Isocode)) %>%
+  ggplot(aes(long, lat, group = group)) + 
+  geom_polygon(aes(fill = phase), color = "steelblue2", size = 0.1) +
+  scale_fill_brewer(palette = "Spectral") +
+  theme_minimal() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(), 
+        axis.title = element_blank(), 
+        axis.ticks = element_blank(),
+        panel.background = element_rect(colour= "black", 
+                                        fill = "lightblue", 
+                                        size = 0.5),
+        panel.grid = element_blank(),
+        legend.text = element_text(size = 6),
+        legend.title = element_text(size = 8)) +
+  ggtitle("Covid19 by Countries Phases") +
+  labs(fill = "Phase")
+```
+
+Currently many countries are facing a rise in the number of infections for which many of them are in the phase of proximity to peak.
+
+This is the current distribution of the countries in each phase:
+
+```{r 2nd_waves12, warning = FALSE}
+group_by(covid19.phases, phase) %>%
+  summarise(n = n()) %>%
+  knitr::kable(caption = "Distribution of the countries in each phase") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+              font_size = 8, position = "center")
+```
+
+```{r 2nd_waves13, warning = FALSE}
+# Current phase of the countries
+filter(covid19.phases, phase != "5. Uncertain") %>%
+  mutate(continent.name = countrycode(sourcevar = country.alphacode, 
+                                      origin = "iso3c", destination = "continent")) %>%
+  ggplot(aes(x = I.max_3, 
+             y = reorder_within(country.alphacode, desc(country.alphacode), phase),
+             color = continent.name, size = TPR.max_3)) +
+  geom_point() +
+  scale_y_reordered() +
+  scale_x_continuous(labels = label_number_si()) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        legend.text = element_text(size = 8, color = "black"),
+        title = element_text(size = 10, color = "black", face = "bold")) +
+  labs(title = "Current phase of the countries", 
+       x = "Max Infected (7 days mm)", y = "Countries",
+       size = "Positive Rate", color = "Continent") +
+  facet_wrap(. ~ phase, nrow = 1, scale = "free")
+```
+
+
+# RESULTS
+
+# Indicators Tops 
+
+Let's take a look at which countries have the highest figures for the pandemic indicators.
+
+One way to determine the severity of the pandemic in each country is to make comparisons of the indicators that determine it. We will show the countries that are at the top of the IR and CFR indicators.
+
+## Infected Top
+
+The IR determines a measure of the number of infected in each country.
+
+```{r visualization_Top10_IR, warning = FALSE, fig.align = 'center'}
+library(gridExtra)
+library(grid)
+grid.arrange(ncol = 1, 
+             top = textGrob("IR Top", gp = gpar(fontsize = 12, font = 2)),
+             filter(covid19, date == last(date)) %>%
+               filter(I.cum > mean(I.cum)) %>% 
+               top_n(10, wt = IR) %>%
+               ggplot(aes(x = reorder(country.alphacode, IR), y = IR, fill = IR)) +
+               geom_col() +
+               coord_flip() +
+               scale_y_continuous(labels = comma) +
+               scale_fill_gradientn(colours = brewer.pal(3, "YlOrRd" )) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 8, color = "black", hjust = 1),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+                     title = element_text(size = 12, color = "orange3", face = "bold")) +
+               labs(y = "IR", x = element_blank()),
+             filter(covid19, date == last(date)) %>%
+               filter(I.cum > mean(I.cum)) %>% 
+               top_n(10, wt = IR) %>%
+               ggplot(aes(x = reorder(country.alphacode, IR), y = N/10^6, fill = N)) +
+               geom_col() +
+               coord_flip() +
+               scale_y_continuous(labels = comma) +
+               scale_fill_gradientn(colours = brewer.pal(3, "Blues" )) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 8, color = "black", hjust = 1),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+                     title = element_text(size = 12, color = "blue3", face = "bold")) +
+               labs(y = "Population (Millions)", x = element_blank()))
+```
+
+At the top of this indicator are: the Czech Republic, the United States and Belgium. However, the United States and Brazil have significantly higher populations than the rest of the top IR countries.
+
+
+## Deaths Top
+
+The CFR determines a measure of the number of deaths in each country.
+
+```{r visualization_Top10_Deaths, warning = FALSE, fig.align = 'center'}
+grid.arrange(ncol = 1, 
+             top = textGrob("Deaths Top", gp = gpar(fontsize = 12, font = 2)),
+             filter(covid19, date == last(date)) %>%
+               filter(I.cum > mean(I.cum)) %>% 
+               top_n(10, wt = CFR) %>%
+               ggplot(aes(x = reorder(country.alphacode, CFR), y = CFR, fill = CFR)) +
+               geom_col() +
+               coord_flip() +
+               scale_y_continuous(labels = comma) +
+               scale_fill_gradientn(colours = brewer.pal(3, "Reds" )) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 8, color = "black", hjust = 1),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+                     title = element_text(size = 12, color = "Red3", face = "bold")) +
+               labs(y = "CFR", x = element_blank()), 
+             filter(covid19, date == last(date)) %>%
+               filter(I.cum > mean(I.cum)) %>% 
+               top_n(10, wt = M) %>%
+               ggplot(aes(x = reorder(country.alphacode, M), y = M, fill = M)) +
+               geom_bar(stat = "identity") +
+               coord_flip() +
+               scale_y_continuous(labels = comma) +
+               scale_fill_gradientn(colours = brewer.pal(3, "Reds" )) +
+               theme_bw() +
+               theme(axis.text.x = element_text(size = 8, color = "black", hjust = 1),
+                     axis.text.y = element_text(size = 8, color = "black"),
+                     axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+                     axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+                     title = element_text(size = 12, color = "Red3", face = "bold")) +
+               labs(y = "Mortality", x = element_blank()) )
+```
+
+Regarding the deceased, Mexico leads the fatality rate, however Belgium is the country that has the highest death rate per number of inhabitants.
+
+## Population of Countries with higher than average number of Infected
+
+The countries with the largest number of populations that have a number of infected above the average are the following:
+
+```{r visualization_Top10_Population, warning = FALSE, fig.align = 'center'}
+# N Top 10: Countries with higher than average number of Infected
+filter(covid19, date == last(date)) %>%
+  filter(I.cum > mean(I.cum)) %>% 
+  top_n(10, wt = N) %>%
+  ggplot(aes(x = reorder(country.alphacode, N), y = N, fill = N)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_y_continuous(labels = comma) +
+  scale_fill_gradientn(colours = brewer.pal(3, "Blues" )) +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 8, color = "black", hjust = 1),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        title = element_text(size = 12, color = "Blue3", face = "bold")) +
+  labs(title = "Population Top 10", y = "Population", x = element_blank()) 
+```
+
+
+## All together
+
+In a graph we can show these indicators together for the countries whose number of infected is above the average. Under this criterion, Italy has the highest fatality rate and the United States the largest population.
+
+```{r visualization_Top10_All, warning = FALSE, fig.align = 'center'}
+# All together
+filter(covid19, date == last(date)) %>%
+  filter(I.cum > mean(I.cum)) %>% 
+  top_n(10, wt = IR) %>%
+  select(country.name, country.alphacode, IR, CFR, M, N) %>%
+  gather("Type", "Value", -country.name, -country.alphacode) %>%
+  group_by(Type) %>%
+  top_n(10, wt = Value) %>%
+  ungroup() %>%
+  mutate(alphacode = reorder_within(country.alphacode, Value, Type)) %>%
+  ggplot(aes(x = reorder(alphacode, Value), y = Value, 
+             fill = country.name)) +
+  geom_col() +
+  facet_wrap(Type ~ ., ncol = 2, scales = "free", 
+             labeller = as_labeller(c(
+               'CFR' = "Fatality Rate", 
+               'IR' = "Infected Rate", 
+               'M' = "Mortality", 
+               'N' = "Population"))) +
+  scale_x_reordered() +
+  scale_y_continuous(labels = comma) +
+  scale_fill_brewer(palette = "Spectral") +
+  coord_flip() +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 6, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black", face ="bold"),
+        axis.title = element_text(size = 8, color = "black", face ="bold"),
+        legend.text = element_text(size = 8, color="black", face ="bold"),
+        legend.title = element_text(size = 8, color="black", face ="bold"),
+        strip.text.x = element_text(size = 8, color="black", face ="bold")) +
+  labs(title = "Indicators Top 10", 
+       x = "", y = "Indicators Value", fill = "Countries")
+```
+
+
+## Rankig Indicators progression
+
+### IR Ranking by month
+
+```{r Ranking1, warning = FALSE, fig.align = 'center'}
+filter(covid19, 
+       date %in% as.Date(seq(ceiling_date(first(covid19$date), "month"), 
+                             last(covid19$date), by = "1 month")-1)) %>%
+  group_by(date) %>%
+  mutate(I.rate = mean(I.cum),
+         IR.rk = rank(IR)) %>%
+  filter(I.cum > I.rate) %>%
+  top_n(10, wt = IR.rk) %>%
+  arrange(date, IR.rk) %>%
+  ggplot(aes(x = IR.rk, y = reorder_within(country.alphacode, IR.rk, date), fill = IR.rk)) +
+  geom_col() +
+  scale_x_continuous(labels = label_number_si()) +
+  scale_y_reordered() +
+  scale_fill_gradientn(colours = brewer.pal(3, "YlOrRd" )) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black", hjust = 1),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        title = element_text(size = 12, color = "yellow3", face = "bold")) +
+  labs(title = "Rankig IR progression", x = "IR Ranking", y = "Countries") +
+  facet_wrap(~ month(date, label = TRUE, abbr = FALSE), 
+             ncol = 4, scales = "free")
+```
+
+Over the months the IR ranking has varied: in February it was China, in May Spain, in September Chile and in November Belgium.
+
+
+### Current Top 10 Ranking IR
+
+The countries that are currently at the top of the IR have not always been among the first. Next we show the variation of the IR of the countries that are currently in the top.
+
+```{r Ranking2, warning = FALSE}
+covid19.IR.Top10 <- 
+  filter(covid19, date == last(covid19$date)) %>%
+  mutate(I.rate = mean(I.cum),
+         IR.rk = rank(IR)) %>%
+  filter(I.cum > I.rate) %>%
+  top_n(10, wt = IR.rk) %>%
+  arrange(-IR.rk) %>%
+  mutate(IR.rk =  row_number()) %>%
+  select(country.alphacode, IR, IR.rk) %>%
+  arrange(IR.rk)
+
+covid19.IR.Top10 %>%
+  knitr::kable(caption = "Current Top 10 Ranking IR") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+              font_size = 8, position = "center")
+```
+
+
+### Pregression of Top Ranking IR countries
+
+```{r Ranking3, warning = FALSE, fig.align = 'center'}
+# Pregression of Top Ranking IF countries
+filter(covid19, 
+       country.alphacode %in% covid19.IR.Top10$country.alphacode &
+         date %in% as.Date(seq(ceiling_date(first(covid19$date), "month"), 
+                               last(covid19$date), by = "1 month")-1)) %>%
+  group_by(date) %>%
+  mutate(I.rate = mean(I.cum),
+         IR.rk = rank(IR)) %>%
+  top_n(10, wt = IR.rk) %>%
+  arrange(-IR.rk) %>%
+  mutate(IR.rk =  row_number()) %>%
+  ggplot(aes(x = date, y = IR.rk, color = country.alphacode)) +
+  geom_line(position = "identity", size = 1) +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b") +
+  scale_y_reverse(labels = label_number_si(), breaks = 1:10) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black", hjust = 1),
+        axis.text.y = element_text(size = 6, color = "black"),
+        axis.title.x = element_text(size = 10, color = "black", face = "bold"),
+        axis.title.y = element_text(size = 10, color = "black", face = "bold"),
+        legend.position = "none",
+        title = element_text(size = 12, color = "yellow3", face = "bold")) +
+  labs(title = "Rankig IR progression", x = "Months", y = "Ranking") +
+  facet_wrap(. ~ country.name, ncol = 2)
+```
+
+
+# Indicators Comparisson by Measures
+
+Let's see what happens with the IR and the CFR for the countries that have applied lockdown measures and those that have not. For this we will calculate the IR and CFR for the epidemiological weeks to establish the comparison by measure.
+
+We determine that a country is lockdown when the level of measure taken is 6  (`measure.level == 6`).
+
+```{r Comparisson1, warning = FALSE, fig.align = 'center'}
+# IR group by Measure and EW 
+covid19.s.mm %>%
+  mutate(lockdown = ifelse(measure.level == 6, "Yes", "No")) %>%
+  group_by(EW, lockdown) %>%
+  summarise(IR.week = mean(IR)) %>%
+  ggplot(aes(x = EW, y = IR.week, color = lockdown)) +
+  geom_line(size = 1.5) +
+  scale_x_continuous(n.breaks = 10) +
+  scale_y_continuous(n.breaks = 10) +
+  scale_color_manual(values = c("grey","yellow2")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"), 
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8)) +
+  labs(title = "IR by Measure", x = "EW", y = "IR")
+```
+
+It can be seen that the average IR of the countries that did not apply lockdown measures is higher than those that did; however, in both cases the IR has increased in the same proportion.
+
+Let's do the same but with the CFR.
+
+```{r Comparisson2, warning = FALSE, fig.align = 'center'}
+# CFR group by Measure and EW 
+covid19.s.mm %>%
+  mutate(lockdown = ifelse(measure.level == 6, "Yes", "No")) %>%
+  group_by(EW, lockdown) %>%
+  summarise(CFR.week = mean(CFR)) %>%
+  ggplot(aes(x = EW, y = CFR.week, color = lockdown)) +
+  geom_line(size = 1.5) +
+  scale_x_continuous(n.breaks = 10) +
+  scale_y_continuous(n.breaks = 10) +
+  scale_color_manual(values = c("grey","red2")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"), 
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8)) +
+  labs(title = "CFR by Measure", x = "EW", y = "CFR")
+```
+
+Likewise, the CFR trend is the same for countries with and without lockdown. In this case, the countries that have not performed lockdown have a lower CFR.
+
+Let us only include the countries with the longest period of pandemic:
+
+```{r Comparisson3, warning = FALSE, fig.align = 'center'}
+# After median week:
+filter(covid19.s.mm, EW > median(covid19.s.mm$EW)) %>%
+  mutate(lockdown = ifelse(measure.level == 6, "Yes", "No")) %>%
+  group_by(EW, lockdown) %>%
+  summarise(IR.week = mean(IR)) %>%
+  ggplot(aes(x = EW, y = IR.week, color = lockdown)) +
+  geom_line(size = 1.5) +
+  scale_x_continuous(n.breaks = 10) +
+  scale_y_continuous(n.breaks = 10) +
+  scale_color_manual(values = c("grey","yellow2")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"), 
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8)) +
+  labs(title = "IR by Measure", x = "EW", y = "CFR")
+```
+
+```{r Comparisson4, warning = FALSE, fig.align = 'center'}
+filter(covid19.s.mm, EW > median(covid19.s.mm$EW)) %>%
+  mutate(lockdown = ifelse(measure.level == 6, "Yes", "No")) %>%
+  group_by(EW, lockdown) %>%
+  summarise(CFR.week = mean(CFR)) %>%
+  ggplot(aes(x = EW, y = CFR.week, color = lockdown)) +
+  geom_line(size = 1.5) +
+  scale_x_continuous(n.breaks = 10) +
+  scale_y_continuous(n.breaks = 10) +
+  scale_color_manual(values = c("grey","red2")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        axis.title = element_text(size = 10, color = "black", face = "bold"), 
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 8)) +
+  labs(title = "CFR by Measure", x = "EW", y = "CFR")
+```
+
+These are the CFE values for countries with and without Lockdown:
+
+```{r Comparisson5, warning = FALSE}
+filter(covid19, date == last(date)) %>%
+  mutate(lockdown = ifelse(measure.level == 6, "Yes", "No")) %>%
+  group_by(lockdown) %>%
+  summarise(quantity = n(), CFR.mean = mean(CFR), population = sum(N)) %>%
+  knitr::kable(caption = "Number of countries with or without lockdown") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+
+```{r Comparisson6, warning = FALSE}
+filter(covid19.s.mm, W == last(W)) %>%
+  mutate(lockdown = ifelse(measure.level == 6, "Yes", "No")) %>%
+  group_by(lockdown) %>%
+  summarise(quantity = n(), CFR.mean = mean(CFR), population = sum(N)) %>%
+  knitr::kable(caption = "Number of countries with or without lockdown") %>%
+  kable_styling(latex_options = c("striped","HOLD_position"), 
+                font_size = 8, position = "center")
+```
+
+Now we show the CFR of the countries that have established lockdown:
+
+```{r Comparisson7, warning = FALSE, fig.align = 'center'}
+filter(covid19.s.mm, W == last(W) & measure.level == 6) %>%
+  ggplot(aes(x = CFR, y = reorder(country.alphacode, N))) +
+  geom_col(color = "red2", fill = "red2", alpha = 0.5) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        strip.text = element_text(size = 10, color = "black", face = "bold"),
+        title = element_text(size = 10, color = "black", face = "bold")) +
+  labs(title = "Countries without lockdown", x = "Fatality", y = "Countries") +
+  facet_wrap(. ~ continent.name, nrow = 1, scale = "free_y")
+```
+
+Now we show the CFR of the countries that not have established lockdown:
+
+```{r Comparisson8, warning = FALSE, fig.align = 'center'}
+filter(covid19.s.mm, W == last(W) & measure.level != 6) %>%
+  ggplot(aes(x = CFR, y = reorder(country.alphacode, N))) +
+  geom_col(color = "red2", fill = "red2", alpha = 0.5) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        strip.text = element_text(size = 10, color = "black", face = "bold"),
+        title = element_text(size = 10, color = "black", face = "bold")) +
+  labs(title = "Countries without lockdown", x = "Fatality", y = "Countries") +
+  facet_wrap(. ~ continent.name, nrow = 1, scale = "free_y")
+```
+
+
+# Predict infected for the next few weeks
+
+Using the predictive models that we have already described, we will estimate the number of infected and deceased for the next few weeks.
+
+We start with defining the `covid19.I.nextweek` function to predict the infected in the following weeks.
+
+```{r Predict_Next_Infected1, warning = FALSE}
+# Predict Infected for next week
+covid19.I.nextweek <- function(data, nweeks = 1) {
+  data <- mutate(data, Type = "Real") %>%
+    select(country.alphacode, W, I, latitude, measure.level, season.num, I.cum, Re, Type)
+  lastweek <- last(data$W) 
+  
+  for(i in 1:nweeks) {
+    pred <- group_by(data, country.alphacode) %>%
+      mutate(I = I*(1+Re/100), 
+             I.cum = I.cum + I,
+             rollmean(Re, 3, fill = c(0,0,0), align = "right")) %>%
+      filter(W == lastweek) %>%
+      mutate(W = W + 1, Type = "Predict") %>%
+      select(country.alphacode, W, I, latitude, measure.level, season.num, I.cum, Re, Type)
+    
+    lastweek <- lastweek + 1
+    data <- rbind(data, pred)
+  }
+  data
+}
+```
+
+Now let's calculate the number of infected for the next 3 weeks:
+
+```{r Predict_Next_Infected2, warning = FALSE}
+# Predict the next 3 weeks Infected
+covid19.predict <- covid19.I.nextweek(data = covid19.s.mm, nweeks = 3)
+```
+
+The result for some countries is the following:
+
+```{r Predict_Next_Infected3, warning = FALSE}
+filter(covid19.predict, 
+       country.alphacode %in% c("USA", "BRA", "IND", "ESP","JPN")) %>%
+  left_join(Isocode) %>%
+  mutate(datew = as.Date(paste0(2020,"-01-01"))+W*7-1) %>%
+  ggplot(aes(x = datew, y = I, color = Type)) +
+  geom_line(color = "yellow3") +
+  geom_point() +
+  scale_x_date(date_breaks = "4 week", date_labels = "%d/%b") +
+  scale_y_continuous(labels = label_number_si()) +
+  scale_color_manual(values = c("black", "yellow3")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        strip.text = element_text(size = 10, color = "black", face = "bold"),
+        legend.position = "bottom",
+        title = element_text(size = 10, color = "black", face = "bold")) +
+  labs(title = "Predict Infected", x = "Weeks", y = "Weekly Infected") +
+  facet_wrap(. ~ country.name, ncol = 1, scale = "free_y")
+```
+
+
+# Predict deaths for the next few weeks
+
+Below we will estimate the deceased for the next few weeks. The `covid19.D.nextweek` function calculates the estimated amount of death for the next few weeks:
+
+```{r Predict_Next_Deaths1, warning = FALSE}
+# Predict Deaths for next week
+covid19.D.nextweek <- function(data, model, nweeks = 1) {
+  data.next <- mutate(data, Type = "Real") %>%
+    select(country.alphacode, W, I, latitude, measure.level, season.num, I.cum, Re, Type, D)
+  
+  lastweek <- last(data.next$W) 
+  
+  for(i in 1:nweeks) {
+    pred <- covid19.I.nextweek(filter(data.next, W == lastweek), nweeks = 1) %>%
+      mutate(W = lastweek + 1, Type = "Predict") %>%
+      select(country.alphacode, W, I, latitude, measure.level, season.num, I.cum, Re, Type)
+    
+    pred$D <- predict(model, newdata = pred)
+    lastweek <- lastweek + 1
+    data.next <- rbind(data.next, pred)
+  }
+  data.next
+}
+```
+
+Now let's estimate the deaths from Covid19 for the next 3 weeks:
+
+```{r Predict_Next_Deaths2, warning = FALSE}
+# Predict the next 3 weeks deaths
+covid19.predict <- covid19.D.nextweek(data = filter(covid19.s.mm, W < last(W)), 
+                                      model = death.model, 
+                                      nweeks = 3)
+```
+
+```{r Predict_Next_Deaths3, warning = FALSE, fig.align = 'center'}
+filter(covid19.predict, 
+       country.alphacode %in% c("USA", "BRA", "IND", "ESP","JPN")) %>%
+  left_join(Isocode) %>%
+  mutate(datew = as.Date(paste0(2020,"-01-01"))+W*7-1) %>%
+  ggplot(aes(x = datew, y = D, color = Type)) +
+  geom_line(color = "red2") +
+  geom_point() +
+  scale_x_date(date_breaks = "4 week", date_labels = "%d/%b") +
+  scale_y_continuous(labels = label_number_si()) +
+  scale_color_manual(values = c("black", "red2")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8, color = "black"),
+        axis.text.y = element_text(size = 8, color = "black"),
+        strip.text = element_text(size = 10, color = "black", face = "bold"),
+        legend.position = "bottom",
+        title = element_text(size = 10, color = "black", face = "bold")) +
+  labs(title = "Predict Deaths", x = "Weeks", y = "Weekly Deaths") +
+  facet_wrap(. ~ country.name, ncol = 1, scale = "free_y")
+```
+
+
+# CONCLUSION
+
+Despite the variations in the figures and in the disparity of the measures initially taken by the countries, the global Pandemic indicators have established a marked trend.
+
+The fatality rate of the pandemic marks a downward trend towards 2%. While the IR shows an upward trend towards 1,000 people per 100,000 inhabitants, which results in 100 million infected people.
+
+We show that we can predict the number of infected people using the reproductive number. We also saw that the global Re reproductive number of the Covid19 pandemic is approaching 1.21. We also observe that the geographical position and climatic conditions have a certain correlation with the lethality of the pandemic, having higher rates in countries of the southern hemisphere and the intertropical zone.
+
+The containment measures taken by the countries have discouraged the spread of the pandemic, but the numbers indicate that these measures only work in the long term.
+
+Countries that have taken strict containment measures despite having been able to stop the spread for a few months but then have suffered strong second waves of infection. They also have higher fatality rates than those who took these measures.
+
+It is possible that the confinement produces a weakening in the immune system of the people that causes that the infected people after having been in confinement have a greater lethality. There are recent studies that say that the lack of exposure to sunlight produces a reduction of the immune system due to the lack of vitamin D. The study of the lack of vitamin and its correlation with the fatality rate of the Covid19 infection could be a future data analysis project related to this pandemic.
